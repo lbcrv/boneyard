@@ -373,7 +373,9 @@ function handleRagdollEvents() {
     switch (e.type) {
       case 'hit': {
         const head = e.part.name === 'head';
-        addPoints(e.pts, head && e.pts > 40 ? 'CABEZA' : '', e.point, head ? 'head' : '');
+        // crash-test readout: body part and impact speed for the hits that matter
+        const readout = e.v > 6 ? `${e.part.def.label} ${e.v.toFixed(1).replace('.', ',')} m/s` : '';
+        addPoints(e.pts, readout, e.point, head ? 'head' : '');
         sfx.thud(e.v, true);
         if (e.v > 5.5) sfx.grunt(e.v / 8);
         if (e.v > 7) fx.dust(e.point, Math.min(1.6, e.v / 10));
@@ -414,7 +416,7 @@ function updateHUD() {
   const mult = 1 + Math.min(20, combo) * 0.1;
   const comboLive = realTime - lastHitTime < 1.3 && combo > 0;
   elCombo.classList.toggle('hidden', !comboLive);
-  if (comboLive) elCombo.textContent = 'x' + mult.toFixed(1);
+  if (comboLive) elCombo.textContent = '×' + mult.toFixed(1).replace('.', ',');
   const ds = ragdoll.displayState;
   const cls = { stand: 'stand', air: 'stand', stumble: 'stumble', fall: 'fall', down: 'fall', ko: 'ko', wrecked: 'ko', getup: 'getup', limp: 'limp' }[ds] || 'fall';
   elState.className = 'state ' + cls;
