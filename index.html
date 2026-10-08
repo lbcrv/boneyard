@@ -1,0 +1,77 @@
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>BONEYARD — Sandbox de ragdoll activo</title>
+  <meta name="description" content="Sandbox de ragdoll activo estilo Euphoria/Endorphin en el navegador. Empuja, lanza y explota a un muñeco de pruebas con física realista." />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Bungee&family=Rubik:wght@400;600;800&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="style.css" />
+  <script type="importmap">
+  {
+    "imports": {
+      "three": "https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js",
+      "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.160.0/examples/jsm/",
+      "cannon-es": "https://cdn.jsdelivr.net/npm/cannon-es@0.20.0/dist/cannon-es.js"
+    }
+  }
+  </script>
+</head>
+<body>
+  <div id="app"></div>
+
+  <!-- HUD -->
+  <div id="hud">
+    <div id="score-panel" class="panel">
+      <div class="label">DOLOR</div>
+      <div id="score">0</div>
+      <div class="sub">Mejor: <b id="best">0</b> · Huesos rotos: <b id="bones">0</b></div>
+      <div id="combo" class="combo hidden">x1.0</div>
+    </div>
+
+    <div id="status-panel" class="panel">
+      <div id="map-name">—</div>
+      <div id="state" class="state stand">DE PIE</div>
+      <div id="timer" class="hidden">0.00 s</div>
+      <div id="flags"></div>
+    </div>
+
+    <div id="toolbar"></div>
+
+    <div id="help" class="panel">
+      <div class="help-title">Controles <span class="k">H</span></div>
+      <div><span class="k">WASD</span> moverse · <span class="k">Shift</span> correr</div>
+      <div><span class="k">Espacio</span> saltar · <span class="k">Q</span> lanzarse en plancha</div>
+      <div><span class="k">F</span> puñetazo · <span class="k">E</span> (mantener) agarrar con las manos</div>
+      <div><span class="k">X</span> hacerse el muerto · <span class="k">R</span> reaparecer</div>
+      <div><span class="k">1-7</span> herramientas · <span class="k">Clic izq.</span> usar</div>
+      <div><span class="k">Clic der.</span> arrastrar = girar cámara · <span class="k">Rueda</span> zoom</div>
+      <div><span class="k">T</span> cámara lenta · <span class="k">G</span> gravedad lunar · <span class="k">Backspace</span> reiniciar mapa</div>
+      <div><span class="k">Esc</span> menú de mapas</div>
+    </div>
+
+    <div id="popups"></div>
+    <div id="banner"></div>
+    <div id="vignette"></div>
+    <div id="crosshair"></div>
+  </div>
+
+  <!-- MENU -->
+  <div id="menu">
+    <div class="menu-inner">
+      <h1>BONEYARD</h1>
+      <p class="tag">Sandbox de ragdoll activo · un muñeco de pruebas que <i>intenta</i> mantenerse en pie</p>
+      <div id="map-list"></div>
+      <div class="menu-foot">
+        <span>Elige un mapa para empezar · <span class="k">Esc</span> vuelve a este menú</span>
+      </div>
+    </div>
+  </div>
+
+  <div id="loading">Cargando física…</div>
+
+  <script type="module" src="src/main.js"></script>
+</body>
+</html>
