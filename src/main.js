@@ -136,7 +136,11 @@ window.addEventListener('keydown', (e) => {
       for (const b of world.bodies) b.wakeUp();
       sfx.blip(moonGravity ? 330 : 660); updateFlags();
       break;
-    case 'KeyH': document.getElementById('help').classList.toggle('hidden'); break;
+    case 'KeyH': {
+      const collapsed = document.getElementById('help').classList.toggle('collapsed');
+      store('helpCollapsed', collapsed ? 1 : 0);
+      break;
+    }
     default:
       if (/^Digit[1-7]$/.test(e.code)) selectTool(Number(e.code.slice(5)) - 1);
   }
@@ -619,6 +623,7 @@ function tick(dt, render = true) {
 // ------------------------------------------------------------------ boot
 buildToolbar();
 buildMenu();
+document.getElementById('help').classList.toggle('collapsed', load('helpCollapsed') === 1);
 loadMap(MAPS[0]);
 document.getElementById('loading').classList.add('hidden');
 updateFlags();

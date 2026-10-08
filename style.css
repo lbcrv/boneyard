@@ -110,10 +110,17 @@ html, body {
 
 #help {
   position: absolute; bottom: 16px; left: 16px;
-  padding: 10px 14px; font-size: 12.5px; line-height: 1.75; color: var(--muted);
-  max-width: 360px;
+  padding: 10px 14px 12px;
+  font-family: var(--f-cond); font-size: 14px; color: var(--muted);
 }
-#help .help-title { font-weight: 800; color: var(--ink); margin-bottom: 2px; }
+#help .help-head { font-weight: 700; letter-spacing: 1.5px; text-transform: uppercase; color: var(--ink); font-size: 13px; }
+#help .keys {
+  display: grid; grid-template-columns: auto auto auto auto; gap: 4px 10px; align-items: center;
+  margin: 10px 0 0;
+}
+#help dt { justify-self: end; font-weight: 700; color: var(--ink); border: 1px solid #3a3a3a; padding: 0 5px; border-radius: 2px; font-size: 13px; }
+#help dd { margin: 0 8px 0 0; }
+#help.collapsed .keys { display: none; }
 
 #popups { position: absolute; inset: 0; overflow: hidden; }
 .pop {
