@@ -492,13 +492,20 @@ function buildMenu() {
   list.innerHTML = '';
   for (const m of MAPS) {
     const b = document.createElement('button');
-    b.className = 'map-card';
+    b.className = 'map-row';
     const bestScore = load('best.' + m.id);
     const bestTime = load('time.' + m.id);
-    b.innerHTML = `<div class="em">${m.code}</div><h3></h3><p></p><div class="best"></div>`;
-    b.querySelector('h3').textContent = m.name;
-    b.querySelector('p').textContent = m.desc;
-    b.querySelector('.best').textContent = (bestScore ? 'Récord de dolor: ' + bestScore.toLocaleString('es') : 'Sin récord todavía') + (bestTime ? ' · Mejor tiempo: ' + bestTime + ' s' : '');
+    b.innerHTML = '<span class="code"></span><span class="what"><span class="nm"></span><span class="spec"></span></span><span class="rec"></span>';
+    b.querySelector('.code').textContent = m.code;
+    b.querySelector('.nm').textContent = m.name;
+    b.querySelector('.spec').textContent = m.desc;
+    const rec = b.querySelector('.rec');
+    rec.textContent = bestScore ? bestScore.toLocaleString('es') : '—';
+    if (bestTime) {
+      const t = document.createElement('small');
+      t.textContent = bestTime.toFixed(2) + ' s';
+      rec.appendChild(t);
+    }
     b.addEventListener('click', () => {
       sfx.initAudio();
       sfx.blip(660);
@@ -592,6 +599,14 @@ function tick(dt, render = true) {
     // idle orbit behind the menu
     cam.yaw += dt * 0.08;
   }
+
+  // keep the dummy centred in the free area to the right of the menu panel
+  const W = Math.max(1, window.innerWidth), H = Math.max(1, window.innerHeight);
+  const menuVisible = !menu.classList.contains('hidden');
+  document.body.classList.toggle('menu-open', menuVisible);
+  const menuOpen = menuVisible && W > 760;
+  if (menuOpen) camera.setViewOffset(W, H, -Math.min(540, W) / 2, 0, W, H);
+  else if (camera.view && camera.view.enabled) camera.clearViewOffset();
 
   syncAll();
   ragdoll.updateVisuals();
