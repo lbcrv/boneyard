@@ -34,9 +34,9 @@ function crateWall(x, z, cols, rows, size = 0.8, yaw = 0, y0 = 0) {
 export const MAPS = [
   {
     id: 'patio',
-    name: 'El Patio',
+    name: 'Patio',
     code: 'P-01',
-    desc: 'Sandbox clásico: rampas, dominó, balancín, tronco colgante, cama elástica y plataformas de lanzamiento.',
+    desc: 'Rampas, dominó, balancín, un tronco colgante y una cama elástica. Dos plataformas de lanzamiento.',
     env: { skyTop: '#5d9fe0', skyBottom: '#dfe9f2', fog: 0xdfe9f2, fogNear: 60, fogFar: 170, sun: [30, 50, 18] },
     spawn: { pos: [0, 0, 0], yaw: 0 },
     killY: -30,
@@ -105,9 +105,9 @@ export const MAPS = [
   // ======================================================================
   {
     id: 'escalera',
-    name: 'Escalera del Dolor',
+    name: 'Escalera',
     code: 'P-02',
-    desc: '40 escalones de puro sufrimiento. Empújalo, dispárale o tírate tú mismo. Cada golpe suma.',
+    desc: '40 escalones y 18 metros de desnivel. Si baja corriendo, tropieza.',
     env: { skyTop: '#2c3e66', skyBottom: '#e8a26b', fog: 0xd99a6a, fogNear: 50, fogFar: 160, sun: [-25, 40, 30] },
     spawn: { pos: [0, 18, 1.5], yaw: 0 },
     killY: -30,
@@ -150,9 +150,9 @@ export const MAPS = [
   // ======================================================================
   {
     id: 'picadora',
-    name: 'La Picadora',
+    name: 'Picadora',
     code: 'P-03',
-    desc: 'Pista de obstáculos sobre el vacío: barredoras, martillos y pistones. Llega a la meta… si puedes.',
+    desc: '92 metros de pista sobre el vacío con barredoras, martillos y pistones. Cronometrada.',
     env: { skyTop: '#3b2a5c', skyBottom: '#ff9c7a', fog: 0xb07a8a, fogNear: 40, fogFar: 140, sun: [20, 40, -30] },
     spawn: { pos: [0, 0, 2], yaw: 0 },
     killY: -18,
@@ -206,7 +206,7 @@ export const MAPS = [
           if (who !== 'ragdoll' || L.checkpoint?.[2] >= z) return;
           L.checkpoint = [0, 0, z];
           ring.material = lv.stdMat(0x59e08b, { emissive: 0x59e08b, emissiveIntensity: 1.4 });
-          fx.banner('CHECKPOINT');
+          fx.banner('PUNTO DE CONTROL');
           sfx.blip(880);
         }, { cooldown: 2 });
       }
@@ -224,9 +224,9 @@ export const MAPS = [
   // ======================================================================
   {
     id: 'tejados',
-    name: 'Los Tejados',
+    name: 'Tejados',
     code: 'P-04',
-    desc: 'Azoteas a 30 metros, plataformas de lanzamiento entre edificios, una bola de demolición y una calle llena de coches.',
+    desc: 'Cuatro azoteas, la más alta a 30 metros. Una bola de demolición y coches aparcados abajo.',
     env: { skyTop: '#7fb6ea', skyBottom: '#f3e6d0', fog: 0xe9e0d0, fogNear: 70, fogFar: 230, sun: [40, 70, 20] },
     spawn: { pos: [0, 30, -2], yaw: 0 },
     killY: -30,

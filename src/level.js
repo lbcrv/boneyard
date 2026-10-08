@@ -305,7 +305,7 @@ export function explode(pos, radius = 6, power = 20) {
     }
     R.knockdown(hitRagdoll);
     const pts = Math.round(80 + hitRagdoll * 420);
-    L.onScore?.(pts, '¡BOOM!', R.chest.position);
+    L.onScore?.(pts, 'EXPLOSIÓN', R.chest.position);
   }
 }
 

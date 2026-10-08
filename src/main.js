@@ -373,7 +373,7 @@ function handleRagdollEvents() {
     switch (e.type) {
       case 'hit': {
         const head = e.part.name === 'head';
-        addPoints(e.pts, head && e.pts > 40 ? '¡CABEZA!' : '', e.point, head ? 'head' : '');
+        addPoints(e.pts, head && e.pts > 40 ? 'CABEZA' : '', e.point, head ? 'head' : '');
         sfx.thud(e.v, true);
         if (e.v > 5.5) sfx.grunt(e.v / 8);
         if (e.v > 7) fx.dust(e.point, Math.min(1.6, e.v / 10));
@@ -383,13 +383,13 @@ function handleRagdollEvents() {
       }
       case 'break':
         sfx.crack();
-        fx.banner('¡CRACK!', e.part.def.label + ' ROTO');
+        fx.banner('FRACTURA', e.part.def.label);
         fx.debris(e.point, 0xf3eee2, 7, 3, 0.04);
         fx.flash(0.9);
-        addPoints(250, '¡HUESO ROTO!', e.point, 'head');
+        addPoints(250, 'FRACTURA', e.point, 'head');
         break;
       case 'ko':
-        fx.banner('K.O.', 'fuera de combate');
+        fx.banner('K.O.', 'TRAUMATISMO CRANEAL');
         addPoints(500, 'K.O.', e.point, 'big');
         break;
       case 'step':
@@ -483,10 +483,10 @@ L.onFinish = () => {
   const prev = load('time.' + currentMap.id);
   const record = !prev || runTime < prev;
   if (record) store('time.' + currentMap.id, runTime.toFixed(2));
-  fx.banner('¡META!', runTime.toFixed(2) + ' s' + (record ? ' · ¡RÉCORD!' : ''));
+  fx.banner('META', runTime.toFixed(2) + ' s' + (record ? ' · RÉCORD' : ''));
   const p = ragdoll.chest.position;
   for (let i = 0; i < 4; i++) fx.debris(new THREE.Vector3(p.x, p.y + 1, p.z), [0xff4d3a, 0xffc22e, 0x59e08b, 0x5cc8ff][i], 14, 7, 0.06);
-  addPoints(1000, '¡META!', p, 'big');
+  addPoints(1000, 'META', p, 'big');
 };
 
 // ------------------------------------------------------------------ menu & toolbar
@@ -591,7 +591,7 @@ function tick(dt, render = true) {
     // fell into the void
     if (ragdoll.pelvis.position.y < currentMap.killY) {
       if (respawnTimer === 0) {
-        addPoints(300, '¡AL VACÍO!', ragdoll.chest.position, 'big');
+        addPoints(300, 'CAÍDA AL VACÍO', ragdoll.chest.position, 'big');
         respawnTimer = 0.0001;
       }
     }

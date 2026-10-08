@@ -77,8 +77,8 @@ const DARK = 0x2a2a30;
 const HURT = new THREE.Color(0xe0553a);
 
 export const STATE_LABEL = {
-  stand: 'DE PIE', stumble: 'TAMBALEANDO', fall: 'CAYENDO', down: 'EN EL SUELO',
-  ko: 'K.O.', getup: 'LEVANTÁNDOSE', limp: 'HACIÉNDOSE EL MUERTO', air: 'EN EL AIRE', wrecked: 'DESTROZADO',
+  stand: 'DE PIE', stumble: 'INESTABLE', fall: 'CAYENDO', down: 'EN EL SUELO',
+  ko: 'INCONSCIENTE', getup: 'INCORPORÁNDOSE', limp: 'INERTE', air: 'EN EL AIRE', wrecked: 'NO PUEDE LEVANTARSE',
 };
 
 export class Ragdoll {
