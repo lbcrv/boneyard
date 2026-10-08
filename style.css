@@ -4,8 +4,8 @@
   --muted: #9c988e;
   --dim: #6b6862;
   --bg: #111111;
-  --panel: rgba(18, 18, 22, 0.62);
-  --panel-border: rgba(255, 255, 255, 0.08);
+  --panel: rgba(17, 17, 17, 0.88);
+  --panel-border: #2b2b2b;
   --line: #2b2b2b;
   --accent: #f2c14e;
   --hot: #e5432f;
@@ -35,9 +35,7 @@ html, body {
 .panel {
   background: var(--panel);
   border: 1px solid var(--panel-border);
-  border-radius: 14px;
-  backdrop-filter: blur(6px);
-  -webkit-backdrop-filter: blur(6px);
+  border-radius: 2px;
 }
 
 .hidden { display: none !important; }
@@ -46,9 +44,10 @@ html, body {
   display: inline-block;
   min-width: 1.6em;
   padding: 1px 6px;
-  border-radius: 6px;
-  background: rgba(255, 255, 255, 0.12);
-  border-bottom: 2px solid rgba(0, 0, 0, 0.4);
+  border-radius: 2px;
+  border: 1px solid #3a3a3a;
+  color: var(--ink);
+  font-family: var(--f-cond);
   font-weight: 600;
   font-size: 0.85em;
   text-align: center;
@@ -59,7 +58,8 @@ html, body {
 #score-panel {
   position: absolute; top: 16px; left: 16px;
   padding: 10px 16px 12px;
-  min-width: 210px;
+  min-width: 220px;
+  border-top: 3px solid var(--hot);
 }
 #score-panel .label { font-family: var(--f-cond); font-weight: 700; font-size: 13px; letter-spacing: 2px; color: var(--hot); }
 #score { font-family: var(--f-cond); font-weight: 700; font-size: 48px; line-height: 1; color: var(--accent); transition: transform .08s; }
@@ -75,7 +75,8 @@ html, body {
 
 #status-panel {
   position: absolute; top: 16px; right: 16px;
-  padding: 10px 16px; text-align: right; min-width: 170px;
+  padding: 10px 16px; text-align: right; min-width: 180px;
+  border-top: 3px solid var(--accent);
 }
 #map-name { font-family: var(--f-cond); font-weight: 600; font-size: 13px; color: var(--muted); letter-spacing: 1.5px; }
 .state { font-family: var(--f-cond); font-weight: 700; font-size: 20px; letter-spacing: .5px; margin-top: 2px; }
@@ -88,16 +89,17 @@ html, body {
 
 #toolbar {
   position: absolute; bottom: 16px; left: 50%; transform: translateX(-50%);
-  display: flex; gap: 8px; pointer-events: auto;
+  display: flex; gap: 0; pointer-events: auto;
+  background: var(--panel); border: 1px solid var(--panel-border); border-radius: 2px;
 }
 .tool {
-  width: 66px; height: 66px; border-radius: 14px;
-  background: var(--panel); border: 2px solid var(--panel-border);
+  width: 72px; height: 64px;
+  border-right: 1px solid var(--line); border-top: 3px solid transparent;
   display: flex; flex-direction: column; align-items: center; justify-content: center;
-  cursor: pointer; position: relative; transition: transform .1s, border-color .1s;
-  backdrop-filter: blur(6px);
+  cursor: pointer; position: relative; transition: background-color .1s, border-color .1s;
 }
-.tool:hover { transform: translateY(-2px); }
+.tool:last-child { border-right: 0; }
+.tool:hover { background: rgba(255, 255, 255, 0.05); }
 .tool.active { border-color: var(--accent); background: rgba(242, 193, 78, 0.16); }
 .tool .ico { font-size: 26px; line-height: 1; }
 .tool .nm { font-size: 10px; margin-top: 4px; color: var(--muted); font-weight: 600; }
@@ -155,7 +157,7 @@ html, body {
 
 #menu {
   position: fixed; inset: 0; display: flex; align-items: center; justify-content: center;
-  background: radial-gradient(ellipse at center, rgba(20,20,26,.55), rgba(10,10,14,.88));
+  background: rgba(10, 10, 10, 0.72);
   z-index: 10; padding: 16px; overflow-y: auto;
 }
 #menu.hidden { display: none; }
@@ -167,7 +169,7 @@ html, body {
 #menu .tag { color: var(--muted); font-size: 17px; margin: 18px 0 28px; }
 #map-list { display: grid; grid-template-columns: repeat(auto-fit, minmax(210px, 1fr)); gap: 14px; }
 .map-card {
-  text-align: left; padding: 18px; border-radius: 16px; cursor: pointer;
+  text-align: left; padding: 18px; border-radius: 2px; cursor: pointer;
   background: rgba(255,255,255,.06); border: 2px solid rgba(255,255,255,.08);
   transition: transform .12s, border-color .12s, background .12s;
   color: var(--ink); font: inherit;
