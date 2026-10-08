@@ -100,11 +100,12 @@ html, body {
 }
 .tool:last-child { border-right: 0; }
 .tool:hover { background: rgba(255, 255, 255, 0.05); }
-.tool.active { border-color: var(--accent); background: rgba(242, 193, 78, 0.16); }
-.tool .ico { font-size: 26px; line-height: 1; }
-.tool .nm { font-size: 10px; margin-top: 4px; color: var(--muted); font-weight: 600; }
+.tool.active { border-top-color: var(--accent); background: rgba(242, 193, 78, 0.10); }
+.tool .ico { line-height: 0; color: var(--muted); }
+.tool.active .ico { color: var(--accent); }
+.tool .nm { font-family: var(--f-cond); font-size: 12px; letter-spacing: .5px; margin-top: 5px; color: var(--muted); font-weight: 600; text-transform: uppercase; }
 .tool.active .nm { color: var(--ink); }
-.tool .num { position: absolute; top: 3px; left: 7px; font-size: 10px; color: var(--muted); font-weight: 800; }
+.tool .num { position: absolute; top: 3px; left: 6px; font-family: var(--f-cond); font-size: 11px; color: var(--dim); font-weight: 700; }
 
 #help {
   position: absolute; bottom: 16px; left: 16px;
@@ -175,7 +176,7 @@ html, body {
   color: var(--ink); font: inherit;
 }
 .map-card:hover { transform: translateY(-4px) rotate(-.5deg); border-color: var(--accent); background: rgba(255,194,46,.1); }
-.map-card .em { font-size: 38px; }
+.map-card .em { font-family: var(--f-cond); font-weight: 700; font-size: 14px; letter-spacing: 2px; color: var(--accent); }
 .map-card h3 { font-family: var(--f-cond); font-weight: 700; margin: 8px 0 6px; font-size: 19px; }
 .map-card p { margin: 0; color: var(--muted); font-size: 13.5px; line-height: 1.45; }
 .map-card .best { margin-top: 10px; font-size: 12px; color: var(--accent); font-weight: 600; }

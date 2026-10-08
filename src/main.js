@@ -7,6 +7,7 @@ import { L } from './level.js';
 import { MAPS } from './maps.js';
 import * as fx from './fx.js';
 import * as sfx from './audio.js';
+import { ICONS } from './icons.js';
 
 // ------------------------------------------------------------------ renderer / scene
 const app = document.getElementById('app');
@@ -74,13 +75,13 @@ let respawnTimer = 0;
 let realTime = 0;
 
 const TOOLS = [
-  { id: 'grab', ico: '✋', nm: 'Agarrar' },
-  { id: 'cannon', ico: '⚫', nm: 'Cañón' },
-  { id: 'bomb', ico: '💣', nm: 'Bomba' },
-  { id: 'crate', ico: '📦', nm: 'Caja' },
-  { id: 'barrel', ico: '🛢️', nm: 'Barril' },
-  { id: 'truck', ico: '🚚', nm: 'Camión' },
-  { id: 'push', ico: '🌀', nm: 'Empujón' },
+  { id: 'grab', nm: 'Agarrar' },
+  { id: 'cannon', nm: 'Cañón' },
+  { id: 'bomb', nm: 'Bomba' },
+  { id: 'crate', nm: 'Caja' },
+  { id: 'barrel', nm: 'Barril' },
+  { id: 'truck', nm: 'Camión' },
+  { id: 'push', nm: 'Empujón' },
 ];
 
 function store(key, val) { try { localStorage.setItem('boneyard.' + key, String(val)); } catch { /* ignore */ } }
@@ -422,8 +423,8 @@ function updateHUD() {
 
 function updateFlags() {
   const f = [];
-  if (slowmo) f.push('🐢 CÁMARA LENTA');
-  if (moonGravity) f.push('🌙 GRAVEDAD LUNAR');
+  if (slowmo) f.push('CÁMARA LENTA ×0.3');
+  if (moonGravity) f.push('GRAVEDAD 3.2 m/s²');
   elFlags.textContent = f.join(' · ');
 }
 
@@ -446,7 +447,7 @@ function loadMap(map) {
   applyEnv(map.env);
   map.build();
   best = load('best.' + map.id);
-  document.getElementById('map-name').textContent = map.emoji + ' ' + map.name.toUpperCase();
+  document.getElementById('map-name').textContent = map.code + ' · ' + map.name.toUpperCase();
   respawn(true);
   // let props settle without the player noticing
   for (let i = 0; i < 30; i++) world.step(FIXED_DT);
@@ -494,7 +495,7 @@ function buildMenu() {
     b.className = 'map-card';
     const bestScore = load('best.' + m.id);
     const bestTime = load('time.' + m.id);
-    b.innerHTML = `<div class="em">${m.emoji}</div><h3></h3><p></p><div class="best"></div>`;
+    b.innerHTML = `<div class="em">${m.code}</div><h3></h3><p></p><div class="best"></div>`;
     b.querySelector('h3').textContent = m.name;
     b.querySelector('p').textContent = m.desc;
     b.querySelector('.best').textContent = (bestScore ? 'Récord de dolor: ' + bestScore.toLocaleString('es') : 'Sin récord todavía') + (bestTime ? ' · Mejor tiempo: ' + bestTime + ' s' : '');
@@ -528,7 +529,7 @@ function buildToolbar() {
   TOOLS.forEach((t, i) => {
     const el = document.createElement('div');
     el.className = 'tool' + (i === tool ? ' active' : '');
-    el.innerHTML = `<span class="num">${i + 1}</span><span class="ico">${t.ico}</span><span class="nm">${t.nm}</span>`;
+    el.innerHTML = `<span class="num">${i + 1}</span><span class="ico">${ICONS[t.id]}</span><span class="nm">${t.nm}</span>`;
     el.title = `${t.nm} (${i + 1})`;
     el.addEventListener('pointerdown', (e) => { e.stopPropagation(); selectTool(i); });
     bar.appendChild(el);

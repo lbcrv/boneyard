@@ -35,7 +35,7 @@ export const MAPS = [
   {
     id: 'patio',
     name: 'El Patio',
-    emoji: '🛝',
+    code: 'P-01',
     desc: 'Sandbox clásico: rampas, dominó, balancín, tronco colgante, cama elástica y plataformas de lanzamiento.',
     env: { skyTop: '#5d9fe0', skyBottom: '#dfe9f2', fog: 0xdfe9f2, fogNear: 60, fogFar: 170, sun: [30, 50, 18] },
     spawn: { pos: [0, 0, 0], yaw: 0 },
@@ -106,7 +106,7 @@ export const MAPS = [
   {
     id: 'escalera',
     name: 'Escalera del Dolor',
-    emoji: '🪜',
+    code: 'P-02',
     desc: '40 escalones de puro sufrimiento. Empújalo, dispárale o tírate tú mismo. Cada golpe suma.',
     env: { skyTop: '#2c3e66', skyBottom: '#e8a26b', fog: 0xd99a6a, fogNear: 50, fogFar: 160, sun: [-25, 40, 30] },
     spawn: { pos: [0, 18, 1.5], yaw: 0 },
@@ -151,7 +151,7 @@ export const MAPS = [
   {
     id: 'picadora',
     name: 'La Picadora',
-    emoji: '⚙️',
+    code: 'P-03',
     desc: 'Pista de obstáculos sobre el vacío: barredoras, martillos y pistones. Llega a la meta… si puedes.',
     env: { skyTop: '#3b2a5c', skyBottom: '#ff9c7a', fog: 0xb07a8a, fogNear: 40, fogFar: 140, sun: [20, 40, -30] },
     spawn: { pos: [0, 0, 2], yaw: 0 },
@@ -225,7 +225,7 @@ export const MAPS = [
   {
     id: 'tejados',
     name: 'Los Tejados',
-    emoji: '🏙️',
+    code: 'P-04',
     desc: 'Azoteas a 30 metros, plataformas de lanzamiento entre edificios, una bola de demolición y una calle llena de coches.',
     env: { skyTop: '#7fb6ea', skyBottom: '#f3e6d0', fog: 0xe9e0d0, fogNear: 70, fogFar: 230, sun: [40, 70, 20] },
     spawn: { pos: [0, 30, -2], yaw: 0 },
