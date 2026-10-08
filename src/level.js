@@ -420,7 +420,7 @@ export function swingLog(anchor, len, size, mass, color = 0x8b5a2b) {
   return b;
 }
 
-export function seesaw(pos, length = 6, color = 0x4f86c6) {
+export function seesaw(pos, length = 6, color = 0xe0b13a) {
   const baseMesh = new THREE.Mesh(new THREE.CylinderGeometry(0.0, 0.6, 0.9, 4), stdMat(0x3a3d45));
   baseMesh.position.set(pos[0], pos[1] + 0.45, pos[2]);
   baseMesh.castShadow = true;
@@ -446,7 +446,7 @@ export function trigger(center, half, onEnter, { cooldown = 1, props = false } =
   return tr;
 }
 
-export function launchPad(pos, vel, color = 0x37e3a0) {
+export function launchPad(pos, vel, color = 0xe0b13a) {
   const g = new THREE.Group();
   const base = new THREE.Mesh(new THREE.CylinderGeometry(1.1, 1.25, 0.2, 28), stdMat(0x2d3038, { metalness: 0.4, roughness: 0.4 }));
   const glow = new THREE.Mesh(new THREE.CylinderGeometry(0.9, 0.9, 0.06, 28), stdMat(color, { emissive: color, emissiveIntensity: 1.4 }));
@@ -478,9 +478,9 @@ export function launchPad(pos, vel, color = 0x37e3a0) {
 }
 
 export function trampoline(pos, size = [3, 3]) {
-  const frame = new THREE.Mesh(new THREE.CylinderGeometry(size[0] / 2 + 0.15, size[0] / 2 + 0.15, 0.5, 32), stdMat(0x2b2e36, { metalness: 0.3 }));
+  const frame = new THREE.Mesh(new THREE.CylinderGeometry(size[0] / 2 + 0.15, size[0] / 2 + 0.15, 0.5, 32), stdMat(0xe0b13a, { metalness: 0.3 }));
   frame.position.set(pos[0], pos[1] + 0.25, pos[2]); frame.castShadow = true; frame.receiveShadow = true;
-  const mat = new THREE.Mesh(new THREE.CylinderGeometry(size[0] / 2, size[0] / 2, 0.52, 32), stdMat(0x1f6fff, { roughness: 0.4 }));
+  const mat = new THREE.Mesh(new THREE.CylinderGeometry(size[0] / 2, size[0] / 2, 0.52, 32), stdMat(0x232326, { roughness: 0.6 }));
   mat.position.copy(frame.position); mat.position.y += 0.01;
   addMesh(frame); addMesh(mat);
   staticBox([size[0], 0.5, size[1]], [pos[0], pos[1] + 0.25, pos[2]], { visible: false, material: MAT.bouncy });
@@ -493,7 +493,7 @@ export function trampoline(pos, size = [3, 3]) {
   }, { cooldown: 0.4 });
 }
 
-export function flag(pos, color = 0xff4d3a) {
+export function flag(pos, color = 0xe5432f) {
   const pole = new THREE.Mesh(new THREE.CylinderGeometry(0.06, 0.06, 4, 8), stdMat(0xdddddd, { metalness: 0.6 }));
   pole.position.set(pos[0], pos[1] + 2, pos[2]);
   const cloth = new THREE.Mesh(new THREE.PlaneGeometry(1.4, 0.9, 8, 4), new THREE.MeshStandardMaterial({ color, side: THREE.DoubleSide, roughness: 0.8 }));

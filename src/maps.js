@@ -37,25 +37,25 @@ export const MAPS = [
     name: 'Patio',
     code: 'P-01',
     desc: 'Rampas, dominó, balancín, un tronco colgante y una cama elástica. Dos plataformas de lanzamiento.',
-    env: { skyTop: '#5d9fe0', skyBottom: '#dfe9f2', fog: 0xdfe9f2, fogNear: 60, fogFar: 170, sun: [30, 50, 18] },
+    env: { skyTop: '#7f9cb8', skyBottom: '#dcdfe0', fog: 0xdcdfe0, fogNear: 60, fogFar: 170, sun: [30, 50, 18] },
     spawn: { pos: [0, 0, 0], yaw: 0 },
     killY: -30,
     build() {
-      lv.floor([180, 1, 180], [0, -0.5, 0], gridTexture('#9aa3ad', '#7d8794'), 0xffffff);
+      lv.floor([180, 1, 180], [0, -0.5, 0], gridTexture('#8f8c86', '#76736d'), 0xffffff);
 
       // ramp up to a platform
-      lv.staticBox([4, 0.4, 10], [-9, 1.35, 9.8], { rot: [-0.3, 0, 0], color: 0x5c8fd6 });
-      lv.staticBox([6, 3, 6], [-9, 1.5, 17.6], { color: 0x7b8594 });
+      lv.staticBox([4, 0.4, 10], [-9, 1.35, 9.8], { rot: [-0.3, 0, 0], color: 0xe0b13a });
+      lv.staticBox([6, 3, 6], [-9, 1.5, 17.6], { color: 0x6f6c66 });
       for (let i = 0; i < 3; i++) lv.barrel([-10.8 + i * 1.8, 3.6, 19.5]);
       lv.launchPad([-7, 3, 15.5], [0, 12, -9]);
 
       // stairs to a diving board
       for (let i = 0; i < 10; i++) {
         const h = 0.4 * (i + 1);
-        lv.staticBox([3.2, h, 0.8], [18, h / 2, 2 + i * 0.8], { color: i % 2 ? 0xc7ccd4 : 0xb3b9c3 });
+        lv.staticBox([3.2, h, 0.8], [18, h / 2, 2 + i * 0.8], { color: i % 2 ? 0xa8a49b : 0x99958c });
       }
-      lv.staticBox([3.2, 4, 3], [18, 2, 11.1], { color: 0x9da4ae });
-      lv.staticBox([1.2, 0.2, 4], [18, 4.1, 14.4], { color: 0x2f88ff });
+      lv.staticBox([3.2, 4, 3], [18, 2, 11.1], { color: 0x86827a });
+      lv.staticBox([1.2, 0.2, 4], [18, 4.1, 14.4], { color: 0xe0b13a });
       lv.trampoline([18, 0, 19.5], [3.2, 3.2]);
 
       // crate pyramid + loose crates
@@ -73,7 +73,7 @@ export const MAPS = [
         const x = -6 - Math.sin(a) * r * 0.9 + 0;
         const z = -6 - (1 - Math.cos(a)) * r - i * 0.45;
         const yaw = -a * 0.9;
-        lv.domino([x, 0.5, z], yaw, i % 2 ? 0xf4f1ea : 0xff6b4a);
+        lv.domino([x, 0.5, z], yaw, i % 2 ? 0xe8e4da : 0x2a2a2e);
       }
 
       // seesaw with a crate on one end
@@ -88,17 +88,17 @@ export const MAPS = [
       log.velocity.set(0, 0, 7);
 
       // balls
-      for (let i = 0; i < 5; i++) lv.ball([-2 + i * 1.2, 0.6, 6 + (i % 2)], 0.45, 2, [0xff5b5b, 0x4fa3ff, 0xffd24a, 0x59e08b, 0xc48bff][i], MAT.bouncy);
+      for (let i = 0; i < 5; i++) lv.ball([-2 + i * 1.2, 0.6, 6 + (i % 2)], 0.45, 2, [0xd9682b, 0xe8e4da, 0xe0b13a, 0x3a3d42, 0xd9682b][i], MAT.bouncy);
       lv.ball([2, 0.3, -4], 0.26, 9, 0x23252b);
-      lv.ball([2.8, 0.3, -4.4], 0.26, 9, 0x8a2be2);
+      lv.ball([2.8, 0.3, -4.4], 0.26, 9, 0x5a5650);
 
       // barrels cluster
       for (const [x, z] of [[-2, -18], [-1.1, -18.6], [-2.5, -19.3], [-1.6, -19.8]]) lv.barrel([x, 0.5, z]);
 
       // big ramp to fly off
-      lv.staticBox([5, 0.4, 14], [-26, 2.0, 2], { rot: [0.3, 0, 0], color: 0xff8a3d });
-      lv.staticBox([5, 6, 4], [-26, 3, -6.5], { color: 0x7b8594 });
-      for (let i = 0; i < 6; i++) lv.staticBox([5, 0.6 * (i + 1), 0.7], [-26, 0.3 * (i + 1), -9.0 - i * 0.7 + 0.0 * i], { color: 0xb3b9c3 });
+      lv.staticBox([5, 0.4, 14], [-26, 2.0, 2], { rot: [0.3, 0, 0], color: 0xd9682b });
+      lv.staticBox([5, 6, 4], [-26, 3, -6.5], { color: 0x6f6c66 });
+      for (let i = 0; i < 6; i++) lv.staticBox([5, 0.6 * (i + 1), 0.7], [-26, 0.3 * (i + 1), -9.0 - i * 0.7 + 0.0 * i], { color: 0x99958c });
     },
   },
 
@@ -153,7 +153,7 @@ export const MAPS = [
     name: 'Picadora',
     code: 'P-03',
     desc: '92 metros de pista sobre el vacío con barredoras, martillos y pistones. Cronometrada.',
-    env: { skyTop: '#3b2a5c', skyBottom: '#ff9c7a', fog: 0xb07a8a, fogNear: 40, fogFar: 140, sun: [20, 40, -30] },
+    env: { skyTop: '#2f343c', skyBottom: '#b98a63', fog: 0x86705f, fogNear: 40, fogFar: 140, sun: [20, 40, -30] },
     spawn: { pos: [0, 0, 2], yaw: 0 },
     killY: -18,
     timed: true,
@@ -195,17 +195,17 @@ export const MAPS = [
       // finish
       lv.staticBox([8, 0.1, 3], [0, 0.05, 90], { color: 0xffffff, mat: new THREE.MeshStandardMaterial({ map: checkerTexture(), roughness: 0.6 }) });
       lv.flag([3.6, 0, 90]);
-      lv.flag([-3.6, 0, 90], 0x59e08b);
+      lv.flag([-3.6, 0, 90], 0xe8e4da);
 
       // checkpoints
       for (const z of [30, 55, 68]) {
-        const ring = new THREE.Mesh(new THREE.TorusGeometry(0.5, 0.06, 8, 24), lv.stdMat(0x5cc8ff, { emissive: 0x5cc8ff, emissiveIntensity: 1.2 }));
+        const ring = new THREE.Mesh(new THREE.TorusGeometry(0.5, 0.06, 8, 24), lv.stdMat(0xe8e4da, { emissive: 0xe8e4da, emissiveIntensity: 0.6 }));
         ring.position.set(0, 2.6, z);
         lv.decoMesh(ring);
         lv.trigger([0, 1, z], [4, 2, 0.6], (who) => {
           if (who !== 'ragdoll' || L.checkpoint?.[2] >= z) return;
           L.checkpoint = [0, 0, z];
-          ring.material = lv.stdMat(0x59e08b, { emissive: 0x59e08b, emissiveIntensity: 1.4 });
+          ring.material = lv.stdMat(0xe0b13a, { emissive: 0xe0b13a, emissiveIntensity: 1.2 });
           fx.banner('PUNTO DE CONTROL');
           sfx.blip(880);
         }, { cooldown: 2 });
@@ -250,7 +250,7 @@ export const MAPS = [
 
       // A roof: launch pad to B, AC units, crates
       lv.launchPad([0, hA, 3.2], [0, 8.5, 8.5]);
-      lv.launchPad([3.2, hA, -3], [9.4, 7.5, 0], 0xffb02e);
+      lv.launchPad([3.2, hA, -3], [9.4, 7.5, 0], 0xd9682b);
       lv.staticBox([2, 1.2, 1.5], [-3, hA + 0.6, -3], { color: 0xb8bcc4 });
       lv.staticBox([1.5, 1.6, 1.5], [-3, hA + 0.8, 1], { color: 0xb8bcc4 });
       lv.crate([2.5, hA + 0.4, -1]); lv.crate([2.5, hA + 1.2, -1]);
@@ -259,7 +259,7 @@ export const MAPS = [
       // B roof: crate fort, barrels
       cratePyramid(0, 25, 4, 0.8, hB);
       for (const x of [-3.5, 3.5]) lv.barrel([x, hB + 0.5, 19.5]);
-      lv.launchPad([-3, hB, 25], [8, 9, 0], 0xffb02e);
+      lv.launchPad([-3, hB, 25], [8, 9, 0], 0xd9682b);
 
       // C roof: more pads back to A
       lv.launchPad([24, hC, 20], [-7.2, 7, -6.5]);
@@ -276,7 +276,7 @@ export const MAPS = [
       wreckingBall([0, hB + 16, 22], 13.2, 0.95, 0.2);
 
       // street: parked cars, trampoline, crates, barrels
-      const carColors = [0xd8402a, 0x2f88ff, 0x59e08b, 0xf2c12e, 0xeeeeee];
+      const carColors = [0x8a2a22, 0x3a4a5c, 0xb8b4aa, 0x2a2a2e, 0xe8e4da];
       for (let i = 0; i < 6; i++) car([8.5, 0.75, -14 + i * 7.5], carColors[i % carColors.length], i % 2 ? 0 : PI);
       lv.trampoline([6.5, 0, 6], [3.4, 3.4]);
       cratePyramid(-8, -12, 4);
