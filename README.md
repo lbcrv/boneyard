@@ -130,6 +130,8 @@ python -m http.server 5178
 
 Luego abre http://localhost:5178.
 
+Antes de publicar cambios, ejecuta `python tools/stamp.py`. Escribe un hash del contenido en la URL de cada módulo dentro de `index.html`. GitHub Pages deja que el navegador guarde los archivos 10 minutos, y sin esto un jugador podría recibir el `index.html` nuevo con los `.js` viejos.
+
 ## Archivos
 
 ```
@@ -150,6 +152,7 @@ src/fx.js         partículas instanciadas, sacudida, textos flotantes
 src/audio.js      sonido sintetizado con WebAudio
 src/icons.js      pictogramas
 src/textures.js   texturas generadas con canvas
+tools/stamp.py    versiona las URLs de los módulos (caché)
 ```
 
 ## Licencia
