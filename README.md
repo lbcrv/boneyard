@@ -8,49 +8,117 @@ HTML y JavaScript sin paso de build. [Three.js](https://threejs.org/) dibuja, [c
 
 ## Cómo funciona el muñeco
 
-Es un ragdoll activo, como el de Euphoria/Endorphin: un cuerpo físico de 13 piezas que se sostiene con fuerzas propias.
+Es un ragdoll activo, como el de Euphoria/Endorphin: un cuerpo físico de 16 piezas que se sostiene con fuerzas propias.
 
-- **Músculos.** Cada una de las 12 articulaciones tiene un servo que empuja hacia una postura objetivo con un par máximo. Con el par alto mantiene la pose; con el par bajo cuelga.
-- **Límites.** Hombros, caderas, cuello y cintura giran dentro de un cono. Codos y rodillas son bisagras con tope.
-- **Equilibrio.** La pelvis y el pecho reciben un par que los endereza, y un muelle sostiene la cadera a 95 cm del suelo. Los pasos salen de la velocidad real: si lo empujas, da pasos.
-- **Reacciones.** Un golpe por encima de 3 m/s lo desequilibra; por encima de 7,5 m/s lo tira. En el aire agita los brazos, antes de tocar el suelo pone las manos, en el suelo se encoge. Cuando se queda quieto 1,4 s, se levanta.
-- **Fracturas.** A partir de 14 m/s la articulación del miembro golpeado pierde el músculo y queda colgando. En la cabeza, eso es K.O. durante 4,5 s. Con fractura en las dos piernas ya no se levanta.
-- **Tropiezos.** Si baja una pendiente corriendo, acumula inestabilidad y cae.
+- **Músculos.** Cada una de las 15 articulaciones (columna en dos tramos, cuello, hombros, codos, muñecas, caderas, rodillas, tobillos) tiene un servo que empuja hacia una postura objetivo con un par máximo.
+- **Pasos de verdad.** Un planificador decide dónde pisa cada pie y una IK de dos huesos coloca la pierna. En una escalera cada pie se apoya en un escalón y la cadera baja con él.
+- **Peso.** 85 kg, gravedad de 12,5 m/s² y poco amortiguamiento: cae rápido y pesado.
+- **Reacciones.** Un golpe por encima de 3 m/s lo desequilibra; por encima de 7,5 m/s lo tira. En el aire agita los brazos, antes de tocar el suelo pone las manos, en el suelo se encoge, y se levanta cuando se queda quieto.
+- **Tropiezos.** Caminando baja escaleras; corriendo engancha los escalones y rueda.
+
+## Los 206 huesos
+
+El esqueleto anatómico completo está modelado hueso por hueso: 29 de cráneo, cara, oído e hioides, 26 vértebras, 25 de tórax, 4 de cintura escapular, 2 coxales y 60 por cada par de extremidades. Cada hueso tiene posición y resistencia propias.
+
+Un impacto rompe los huesos que tiene cerca según dónde golpea y a qué velocidad: una bala rompe uno o dos; un golpe contundente, más cuanto más fuerte. Las fracturas tienen consecuencias:
+
+- fémur, tibia, húmero, radio o cúbito rotos: la extremidad pierde el músculo y cuelga
+- vértebra cervical rota: K.O.
+- vértebra torácica o lumbar rota: parálisis de cintura para abajo
+- las dos piernas rotas, o la pelvis: ya no se levanta
+
+La radiografía de la esquina muestra qué partes están dañadas y los últimos huesos rotos con su nombre.
+
+La física no simula 206 cuerpos rígidos; simula 16 segmentos y resuelve las fracturas hueso a hueso dentro de cada uno.
 
 ## Pruebas
 
-| Código | Mapa | Contenido |
+| Código | Mapa | Tipo |
 |---|---|---|
-| P-01 | Patio | Rampas, dominó, balancín, tronco colgante, cama elástica, barriles |
+| P-01 | Patio | Sandbox: rampas, dominó, balancín, tronco colgante, cama elástica |
 | P-02 | Escalera | 40 escalones, 18 m de desnivel |
-| P-03 | Picadora | 92 m de pista sobre el vacío, barredoras, martillos, pistones. Cronometrada |
+| P-03 | Picadora | Pista sobre el vacío con barredoras, martillos y pistones. Cronometrada |
 | P-04 | Tejados | Azoteas de 18 a 30 m, bola de demolición, coches |
+| P-05 | Dohyō | Sumo 1 contra 1 a lo Sumotori Dreams. Al mejor de 5 |
+| P-06 | Plataforma | Cuatro luchadores sobre una losa en el agua. El último en pie gana |
+| P-07 | Muro | Pista de choque a lo Turbo Dismount, con minas a medio camino |
+| P-08 | Cruce | Pista de choque con tráfico cruzado |
+| P-09 | Dojo | Combate cuerpo a cuerpo por oleadas, a lo Lugaru |
+| P-10 | Campo minado | 70 minas enterradas. Cronometrado |
 
-## Controles
+En Muro y Cruce eliges vehículo con `V` (carrito, descapotable, trineo cohete), arrancas con `Espacio` y giras con `A`/`D`. El muñeco va sujeto al asiento y sale despedido cuando el impacto supera lo que aguanta la sujeción.
+
+## Combate
+
+| Tecla | Movimiento |
+|---|---|
+| `F` | Puñetazo (en sumo, empujón con las dos manos) |
+| `V` | Patada. En el aire, patada voladora |
+| `C` | Agacharse: los golpes altos pasan por encima |
+| `C` + `V` | Barrida |
+| `Q` | Placaje |
+
+**Contraataque:** si pulsas `F` o `V` justo cuando el rival empieza su golpe, le atrapas el brazo o la pierna y lo lanzas por encima del hombro. Los rivales también lo intentan contigo.
+
+Los golpes se fijan solos en el rival más cercano. Cada luchador tiene vida: los golpes la bajan, se recupera de pie, y a cero cae inconsciente.
+
+## Armas y herramientas
+
+`1`–`0` eligen herramienta; clic izquierdo la usa.
+
+| Tecla | Herramienta |
+|---|---|
+| `1` | Agarrar: arrastra cualquier cosa y suéltala para lanzarla. Con el muñeco puedes darle un tirón y estamparlo |
+| `2` | Subfusil (mantener el clic) |
+| `3` | Bazuca |
+| `4` | Nuclear: dos segundos de aviso, destello, hongo y una onda expansiva que avanza a 70 m/s |
+| `5` | Mina: se arma en un segundo y explota al pisarla |
+| `6` | Bomba |
+| `7` | Cañón |
+| `8` | Caja |
+| `9` | Barril explosivo |
+| `0` | Camión: apunta al suelo bajo el objetivo y aparece ya lanzado |
+
+## Otros controles
 
 | Tecla | Acción |
 |---|---|
 | `WASD` | Mover (relativo a la cámara) |
 | `Shift` | Correr |
 | `Espacio` | Saltar. En el suelo, levantarse antes |
-| `Q` | Lanzarse en plancha |
-| `F` | Puñetazo |
 | `E` | Mantener para agarrar con las manos (cajas, bordes) |
+| `Z` | Bailar: disco, robot, pollo, saludo. Moverse lo cancela |
 | `X` | Inerte: apaga todos los músculos |
 | `R` | Reaparecer |
-| `1`–`7` | Agarrar, cañón, bomba, caja, barril, camión, empujón |
-| Clic izquierdo | Usar la herramienta. Con agarrar, arrastra y suelta para lanzar |
 | Clic derecho | Arrastrar para girar la cámara |
 | Rueda | Zoom, o distancia de agarre mientras arrastras |
 | `T` | Cámara lenta (×0,3) |
 | `G` | Gravedad lunar (3,2 m/s²) |
+| `B` | Sangre sí / no |
 | `Retroceso` | Reiniciar el mapa |
 | `H` | Plegar la leyenda de teclas |
-| `Esc` | Menú |
+| `Esc` | Menú y ajustes |
+
+## Ajustes
+
+- **Sangre:** desactivada por defecto. Con ella activada hay salpicaduras, heridas que gotean y charcos en el suelo. Se activa en el menú o con `B`, y el navegador recuerda la elección.
+- **Calidad:** en automático, si el juego va lento baja la resolución y la sombra.
+
+## Rendimiento
+
+Pensado para que muchas explosiones a la vez no traben el juego:
+
+- partículas, sangre y trazadoras en `InstancedMesh`: una llamada de dibujo por tipo
+- un número fijo de luces desde el arranque, así una explosión no obliga a recompilar shaders
+- las cadenas de barriles detonan como mucho dos por paso de física
+- las partículas por explosión bajan cuando hay muchas seguidas
+- el solver usa menos iteraciones cuando hay muchos objetos despiertos
+
+Con 25 explosiones simultáneas, el frame medio en las pruebas fue de 3 ms.
 
 ## Puntuación
 
-Cada impacto suma DOLOR en función de la velocidad y la parte del cuerpo; la cabeza cuenta ×2,2. Si encadenas golpes con menos de 1,3 s entre ellos, el multiplicador sube 0,1 por golpe hasta ×3. Las fracturas, el K.O., las explosiones y las caídas al vacío suman extra. El navegador guarda el récord de cada mapa.
+En los mapas sandbox y de choque, cada impacto que recibe el muñeco suma DOLOR según la velocidad y la parte del cuerpo; la cabeza cuenta ×2,2 y cada fractura suma más. En el sumo y el dojo se cuenta el daño que causas. Los golpes seguidos suben el multiplicador hasta ×3. El navegador guarda el récord de cada mapa.
 
 ## En local
 
@@ -68,13 +136,19 @@ Luego abre http://localhost:5178.
 index.html        HUD, menú, importmap
 style.css
 src/main.js       render, cámara, entrada, herramientas, puntuación, bucle
-src/ragdoll.js    cuerpo, articulaciones, músculos, equilibrio, estados
+src/ragdoll.js    cuerpo, músculos, equilibrio, pasos con IK, combate, estados
+src/skeleton.js   los 206 huesos y las fracturas
+src/combat.js     IA de luchador y de sumo
+src/modes.js      reglas de sumo, dojo y pistas de choque
+src/vehicles.js   carrito, descapotable y trineo cohete
+src/weapons.js    subfusil, bazuca, nuclear, minas
+src/blood.js      sangre opcional
 src/level.js      objetos, barriles, camiones, piezas móviles, explosiones
-src/maps.js       las cuatro pruebas
+src/maps.js       las diez pruebas
 src/physics.js    mundo físico y materiales
-src/icons.js      pictogramas de la barra de herramientas
-src/fx.js         partículas, sacudida, textos flotantes
+src/fx.js         partículas instanciadas, sacudida, textos flotantes
 src/audio.js      sonido sintetizado con WebAudio
+src/icons.js      pictogramas
 src/textures.js   texturas generadas con canvas
 ```
 

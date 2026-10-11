@@ -121,9 +121,16 @@ export function grunt(intensity = 1) {
   o.start(t); o.stop(t + 0.35);
 }
 
+let lastBoom = 0;
+let boomStack = 0;
 export function boom(size = 1) {
   if (!ctx) return;
   const t = ctx.currentTime;
+  // many blasts in the same instant: one bigger boom instead of 20 stacked voices
+  if (t - lastBoom < 0.07) { boomStack++; return; }
+  size *= 1 + Math.min(0.6, boomStack * 0.15);
+  boomStack = 0;
+  lastBoom = t;
   const n = noise(t, 1.6);
   const f = ctx.createBiquadFilter();
   f.type = 'lowpass';
@@ -194,4 +201,132 @@ export function fanfare() {
     o.connect(g).connect(master);
     o.start(t); o.stop(t + 0.8);
   });
+}
+
+let lastGun = 0;
+export function gun() {
+  if (!ctx) return;
+  const t = ctx.currentTime;
+  if (t - lastGun < 0.03) return;
+  lastGun = t;
+  const n = noise(t, 0.12);
+  const f = ctx.createBiquadFilter();
+  f.type = 'bandpass'; f.frequency.value = 1400 + Math.random() * 400; f.Q.value = 0.8;
+  const g = ctx.createGain();
+  env(g, t, 0.35, 0.001, 0.07);
+  n.connect(f).connect(g).connect(master);
+  const o = ctx.createOscillator();
+  o.type = 'square';
+  o.frequency.setValueAtTime(180, t);
+  o.frequency.exponentialRampToValueAtTime(60, t + 0.05);
+  const og = ctx.createGain();
+  env(og, t, 0.12, 0.001, 0.05);
+  o.connect(og).connect(master);
+  o.start(t); o.stop(t + 0.08);
+}
+
+export function rocket() {
+  if (!ctx) return;
+  const t = ctx.currentTime;
+  const n = noise(t, 1.2);
+  const f = ctx.createBiquadFilter();
+  f.type = 'bandpass'; f.Q.value = 1.2;
+  f.frequency.setValueAtTime(600, t);
+  f.frequency.exponentialRampToValueAtTime(2500, t + 0.25);
+  f.frequency.exponentialRampToValueAtTime(900, t + 1.1);
+  const g = ctx.createGain();
+  env(g, t, 0.45, 0.01, 1.1);
+  n.connect(f).connect(g).connect(master);
+}
+
+export function siren() {
+  if (!ctx) return;
+  const t = ctx.currentTime;
+  const o = ctx.createOscillator();
+  o.type = 'square';
+  o.frequency.value = 1320;
+  const g = ctx.createGain();
+  env(g, t, 0.08, 0.002, 0.06);
+  o.connect(g).connect(master);
+  o.start(t); o.stop(t + 0.1);
+}
+
+export function nukeBoom() {
+  if (!ctx) return;
+  const t = ctx.currentTime;
+  const n = noise(t, 1.9);
+  const f = ctx.createBiquadFilter();
+  f.type = 'lowpass';
+  f.frequency.setValueAtTime(3500, t);
+  f.frequency.exponentialRampToValueAtTime(40, t + 4);
+  const g = ctx.createGain();
+  env(g, t, 1.4, 0.01, 4);
+  n.connect(f).connect(g).connect(master);
+  // a second, delayed rumble when the wave arrives
+  const n2 = noise(t + 0.6, 1.9);
+  const f2 = ctx.createBiquadFilter();
+  f2.type = 'lowpass'; f2.frequency.value = 160;
+  const g2 = ctx.createGain();
+  env(g2, t + 0.6, 1.2, 0.2, 3.5);
+  n2.connect(f2).connect(g2).connect(master);
+  const o = ctx.createOscillator();
+  o.type = 'sine';
+  o.frequency.setValueAtTime(55, t);
+  o.frequency.exponentialRampToValueAtTime(18, t + 3.5);
+  const og = ctx.createGain();
+  env(og, t, 1.2, 0.01, 3.5);
+  o.connect(og).connect(master);
+  o.start(t); o.stop(t + 4);
+}
+
+export function mineClick() {
+  if (!ctx) return;
+  const t = ctx.currentTime;
+  for (let i = 0; i < 2; i++) {
+    const o = ctx.createOscillator();
+    o.type = 'square'; o.frequency.value = 2200;
+    const g = ctx.createGain();
+    env(g, t + i * 0.08, 0.12, 0.001, 0.03);
+    o.connect(g).connect(master);
+    o.start(t + i * 0.08); o.stop(t + i * 0.08 + 0.05);
+  }
+}
+
+// ---- dance loop: kick, hat, bass. Scheduled a bar ahead.
+let beatOn = false, beatNext = 0, beatStep = 0, beatTimer = 0;
+const BPM = 118;
+function scheduleBeat() {
+  if (!beatOn || !ctx) return;
+  const spb = 60 / BPM / 2; // eighth notes
+  while (beatNext < ctx.currentTime + 0.25) {
+    const t = beatNext;
+    const step = beatStep % 8;
+    if (step % 2 === 0) {
+      const o = ctx.createOscillator();
+      o.frequency.setValueAtTime(140, t); o.frequency.exponentialRampToValueAtTime(42, t + 0.12);
+      const g = ctx.createGain(); env(g, t, 0.35, 0.002, 0.16);
+      o.connect(g).connect(master); o.start(t); o.stop(t + 0.2);
+    }
+    const n = noise(t, 0.05);
+    const f = ctx.createBiquadFilter(); f.type = 'highpass'; f.frequency.value = 7000;
+    const g = ctx.createGain(); env(g, t, step % 2 ? 0.1 : 0.05, 0.001, 0.04);
+    n.connect(f).connect(g).connect(master);
+    const notes = [55, 55, 82.4, 55, 65.4, 55, 73.4, 82.4];
+    const b = ctx.createOscillator(); b.type = 'sawtooth'; b.frequency.value = notes[step];
+    const bf = ctx.createBiquadFilter(); bf.type = 'lowpass'; bf.frequency.value = 420;
+    const bg = ctx.createGain(); env(bg, t, 0.12, 0.005, spb * 0.9);
+    b.connect(bf).connect(bg).connect(master); b.start(t); b.stop(t + spb);
+    beatNext += spb;
+    beatStep++;
+  }
+}
+export function setBeat(on) {
+  if (!ctx || on === beatOn) return;
+  beatOn = on;
+  clearInterval(beatTimer);
+  if (on) {
+    beatNext = ctx.currentTime + 0.05; beatStep = 0;
+    beatTimer = setInterval(scheduleBeat, 100);
+    scheduleBeat();
+  }
 }

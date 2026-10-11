@@ -4,6 +4,8 @@ import { world, GROUP, MASK_ALL, MAT, track, untrack, synced } from './physics.j
 import { crateTexture, barrelTexture, hazardTexture } from './textures.js';
 import * as fx from './fx.js';
 import * as sfx from './audio.js';
+import * as blood from './blood.js';
+import { Ragdoll } from './ragdoll.js';
 
 /*
  * Everything that belongs to the current map lives here so a map switch / reset
@@ -90,6 +92,23 @@ export function staticBox(size, pos, { rot = [0, 0, 0], color = 0x9aa0a8, map = 
     mesh.userData.body = body;
     addMesh(mesh);
   }
+  return body;
+}
+
+/** Static truncated cone / cylinder standing on its base. */
+export function staticCylinder(rTop, rBot, h, pos, color = 0x9aa0a8) {
+  const body = new CANNON.Body({
+    mass: 0, material: MAT.ground, type: CANNON.Body.STATIC,
+    collisionFilterGroup: GROUP.STATIC, collisionFilterMask: MASK_ALL,
+  });
+  body.addShape(new CANNON.Cylinder(rTop, rBot, h, 28));
+  body.position.set(pos[0], pos[1], pos[2]);
+  addBody(body);
+  const mesh = new THREE.Mesh(new THREE.CylinderGeometry(rTop, rBot, h, 48), stdMat(color, { roughness: 0.95 }));
+  mesh.position.set(pos[0], pos[1], pos[2]);
+  mesh.castShadow = true; mesh.receiveShadow = true;
+  mesh.userData.body = body;
+  addMesh(mesh);
   return body;
 }
 
@@ -181,7 +200,7 @@ export function barrel(pos) {
   return b;
 }
 
-export function truck(pos, dir, speed = 22) {
+export function truck(pos, dir, speed = 22, flatOut = false) {
   const g = new THREE.Group();
   const yaw = Math.atan2(dir.x, dir.z);
   const red = stdMat(0xd8402a, { roughness: 0.4, metalness: 0.3 });
@@ -248,7 +267,7 @@ export function limitProps(max = 70) {
 
 export function removeBody(b) {
   if (!b) return;
-  L.ragdoll?.releaseGripsOn(b);
+  for (const r of Ragdoll.all) r.releaseGripsOn(b);
   world.removeBody(b);
   untrack(b);
   const m = b.userData && b.userData.mesh;
@@ -266,46 +285,55 @@ export function scheduleExplosion(barrelBody, delay) {
   L.pendingExplosions.push({ body: barrelBody, t: delay });
 }
 
-export function explode(pos, radius = 6, power = 20) {
+export function explode(pos, radius = 6, power = 20, opts = {}) {
   const p = new THREE.Vector3(pos.x, pos.y, pos.z);
-  fx.explosion(p, radius);
-  sfx.boom(Math.min(1.3, radius / 6));
-  let hitRagdoll = 0;
-  const all = world.bodies.slice();
-  for (const b of all) {
+  const up = opts.up ?? 5;
+  if (opts.fxScale !== 0) fx.explosion(p, radius);
+  if (!opts.silent) sfx.boom(Math.min(1.3, radius / 6));
+  L.onExplode?.(p, radius);
+  const r2 = radius * radius;
+  // broadphase by hand: one pass over bodies, squared distances, no allocation
+  for (const b of world.bodies) {
     if (b.type !== CANNON.Body.DYNAMIC) continue;
+    if (b.userData && b.userData.ragdoll) continue;
     const dx = b.position.x - p.x, dy = b.position.y - p.y + 0.4, dz = b.position.z - p.z;
-    const d = Math.hypot(dx, dy, dz);
-    if (d > radius) continue;
+    const dd = dx * dx + dy * dy + dz * dz;
+    if (dd > r2) continue;
+    const d = Math.sqrt(dd);
     const f = 1 - d / radius;
     const inv = 1 / Math.max(0.3, d);
     const massScale = b.mass > 300 ? 300 / b.mass : 1;
-    const isRag = b.userData && b.userData.ragdoll;
-    if (isRag) { hitRagdoll = Math.max(hitRagdoll, f); continue; }
     b.wakeUp();
     b.velocity.x += dx * inv * power * f * massScale;
-    b.velocity.y += (dy * inv * power * f + 5 * f) * massScale;
+    b.velocity.y += (dy * inv * power * f + up * f) * massScale;
     b.velocity.z += dz * inv * power * f * massScale;
     b.angularVelocity.x += (Math.random() - 0.5) * 12 * f;
     b.angularVelocity.y += (Math.random() - 0.5) * 12 * f;
     b.angularVelocity.z += (Math.random() - 0.5) * 12 * f;
-    if (L.barrels.has(b) && b !== undefined && d > 0.05) scheduleExplosion(b, 0.12 + Math.random() * 0.15);
+    if (L.barrels.has(b) && d > 0.05) scheduleExplosion(b, 0.12 + Math.random() * 0.15);
   }
-  const R = L.ragdoll;
-  if (R && hitRagdoll > 0) {
-    // push every part individually from the blast centre: looks great
+  for (const R of Ragdoll.all) {
+    const c = R.chest.position;
+    const cdx = c.x - p.x, cdy = c.y - p.y, cdz = c.z - p.z;
+    const cd = Math.sqrt(cdx * cdx + cdy * cdy + cdz * cdz);
+    if (cd > radius + 1) continue;
+    const hit = Math.max(0, 1 - cd / radius);
+    // push every part individually from the blast centre
     for (const part of R.parts) {
       const b = part.body;
       const dx = b.position.x - p.x, dy = b.position.y - p.y + 0.4, dz = b.position.z - p.z;
       const d = Math.max(0.3, Math.hypot(dx, dy, dz));
       const f = Math.max(0, 1 - d / radius);
       b.velocity.x += (dx / d) * power * f * 0.9;
-      b.velocity.y += ((dy / d) * power * f + 6 * f) * 0.9;
+      b.velocity.y += ((dy / d) * power * f + (up + 1) * f) * 0.9;
       b.velocity.z += (dz / d) * power * f * 0.9;
+      if (f > 0.55) blood.spray(new THREE.Vector3(b.position.x, b.position.y, b.position.z), new THREE.Vector3(dx / d, dy / d + 0.3, dz / d), 4, 4 * f);
     }
-    R.knockdown(hitRagdoll);
-    const pts = Math.round(80 + hitRagdoll * 420);
-    L.onScore?.(pts, 'EXPLOSIÓN', R.chest.position);
+    if (hit <= 0) continue;
+    R.knockdown(hit);
+    if (hit > 0.35) R.blastTrauma(Math.min(1, (hit - 0.3) * 1.2));
+    if (hit > 0.5) R.burnt = Math.max(R.burnt, (hit - 0.5) * 0.8);
+    L.onScore?.(Math.round(80 + hit * 420), 'EXPLOSIÓN', R.chest.position, R);
   }
 }
 
@@ -465,8 +493,9 @@ export function launchPad(pos, vel, color = 0xe0b13a) {
   trigger([pos[0], pos[1] + 0.8, pos[2]], [1.0, 0.7, 1.0], (who) => {
     sfx.whoosh();
     fx.sparks(new THREE.Vector3(pos[0], pos[1] + 0.3, pos[2]), 14);
-    if (who === 'ragdoll') {
-      const R = L.ragdoll;
+    if (who.parts) {
+      const R = who;
+      if (R.state === 'seated') return;
       const com = R.comVelocity(new THREE.Vector3());
       R.addVelocity(vel[0] - com.x, vel[1] - com.y, vel[2] - com.z, 3);
       R.goFall('launch');
@@ -485,8 +514,8 @@ export function trampoline(pos, size = [3, 3]) {
   addMesh(frame); addMesh(mat);
   staticBox([size[0], 0.5, size[1]], [pos[0], pos[1] + 0.25, pos[2]], { visible: false, material: MAT.bouncy });
   trigger([pos[0], pos[1] + 0.9, pos[2]], [size[0] / 2, 0.5, size[1] / 2], (who) => {
-    if (who === 'ragdoll') {
-      const R = L.ragdoll;
+    if (who.parts) {
+      const R = who;
       const com = R.comVelocity(new THREE.Vector3());
       if (com.y < -1) { R.addVelocity(0, Math.min(16, -com.y * 0.6 + 7) - com.y * 0.0, 0, 2); R.goFall('bounce'); sfx.whoosh(); }
     }
@@ -516,10 +545,14 @@ export function decoMesh(mesh) { addMesh(mesh); return mesh; }
 export function stepLevel(dt) {
   L.time += dt;
   for (const u of L.updaters) u(dt, L.time);
+  // chain reactions: at most 2 detonations per physics step, the rest wait a
+  // step. 30 barrels going off together is a 0.12 s ripple instead of one frozen frame.
+  let budget = 2;
   for (let i = L.pendingExplosions.length - 1; i >= 0; i--) {
     const e = L.pendingExplosions[i];
     e.t -= dt;
-    if (e.t <= 0) {
+    if (e.t <= 0 && budget > 0) {
+      budget--;
       L.pendingExplosions.splice(i, 1);
       if (e.body.world) {
         const p = e.body.position.clone();
@@ -532,16 +565,17 @@ export function stepLevel(dt) {
 
 const _tp = new THREE.Vector3();
 export function checkTriggers() {
-  const R = L.ragdoll;
   for (const tr of L.triggers) {
-    // ragdoll: any of pelvis / feet inside
-    let inside = false;
-    for (const name of ['pelvis', 'footL', 'footR', 'chest']) {
-      const p = R.partMap[name].body.position;
-      _tp.set(p.x, p.y, p.z);
-      if (_tp.x > tr.min.x && _tp.x < tr.max.x && _tp.y > tr.min.y && _tp.y < tr.max.y && _tp.z > tr.min.z && _tp.z < tr.max.z) { inside = true; break; }
+    for (const R of Ragdoll.all) {
+      // any of pelvis / feet / chest inside
+      let inside = false;
+      for (const name of ['pelvis', 'footL', 'footR', 'chest']) {
+        const p = R.partMap[name].body.position;
+        _tp.set(p.x, p.y, p.z);
+        if (_tp.x > tr.min.x && _tp.x < tr.max.x && _tp.y > tr.min.y && _tp.y < tr.max.y && _tp.z > tr.min.z && _tp.z < tr.max.z) { inside = true; break; }
+      }
+      if (inside) fire(tr, R);
     }
-    if (inside) fire(tr, 'ragdoll');
     if (tr.props) {
       for (const b of L.props) {
         const p = b.position;

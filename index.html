@@ -8,7 +8,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=Big+Shoulders+Stencil+Display:wght@800&family=Barlow+Condensed:wght@500;600;700&family=Barlow:wght@400;500&display=swap" rel="stylesheet" />
-  <link rel="stylesheet" href="style.css?v=5" />
+  <link rel="stylesheet" href="style.css?v=8" />
   <script type="importmap">
   {
     "imports": {
@@ -25,17 +25,25 @@
   <!-- HUD -->
   <div id="hud">
     <div id="score-panel" class="panel">
-      <div class="label">DOLOR</div>
+      <div class="label" id="score-label">DOLOR</div>
       <div id="score">0</div>
-      <div class="sub">Récord <b id="best">0</b> · Fracturas <b id="bones">0</b></div>
-      <div id="combo" class="combo hidden">x1.0</div>
+      <div class="sub">Récord <b id="best">0</b></div>
+      <div id="combo" class="combo hidden">×1,0</div>
     </div>
 
     <div id="status-panel" class="panel">
       <div id="map-name">—</div>
       <div id="state" class="state stand">DE PIE</div>
       <div id="timer" class="hidden">0.00 s</div>
+      <div id="mode-status"></div>
       <div id="flags"></div>
+    </div>
+
+    <div id="xray" class="panel" aria-label="Radiografía">
+      <div class="xr-head">Radiografía</div>
+      <svg id="xray-fig" viewBox="0 0 60 100" aria-hidden="true"></svg>
+      <div class="xr-count"><b id="bones">0</b><span>/206 huesos rotos</span></div>
+      <ol id="xr-last"></ol>
     </div>
 
     <div id="toolbar"></div>
@@ -46,26 +54,31 @@
         <dt>WASD</dt><dd>mover</dd>
         <dt>Shift</dt><dd>correr</dd>
         <dt>Espacio</dt><dd>saltar</dd>
-        <dt>Q</dt><dd>plancha</dd>
         <dt>F</dt><dd>puñetazo</dd>
+        <dt>V</dt><dd>patada</dd>
+        <dt>C</dt><dd>agacharse</dd>
+        <dt>C + V</dt><dd>barrida</dd>
+        <dt>Q</dt><dd>placaje</dd>
         <dt>E</dt><dd>agarrar</dd>
+        <dt>Z</dt><dd>bailar</dd>
         <dt>X</dt><dd>inerte</dd>
         <dt>R</dt><dd>reaparecer</dd>
-        <dt>1–7</dt><dd>herramienta</dd>
+        <dt>1–0</dt><dd>herramienta</dd>
         <dt>Clic</dt><dd>usar</dd>
         <dt>Clic der.</dt><dd>cámara</dd>
         <dt>Rueda</dt><dd>zoom</dd>
         <dt>T</dt><dd>cámara lenta</dd>
         <dt>G</dt><dd>gravedad</dd>
-        <dt>Retroceso</dt><dd>reiniciar</dd>
+        <dt>B</dt><dd>sangre</dd>
         <dt>Esc</dt><dd>menú</dd>
       </dl>
+      <div class="help-foot">Contraataque: pulsa F o V justo cuando el rival empieza su golpe.</div>
     </div>
 
     <div id="popups"></div>
     <div id="banner"></div>
     <div id="vignette"></div>
-    <div id="crosshair"></div>
+    <div id="whiteout"></div>
   </div>
 
   <!-- MENU -->
@@ -86,6 +99,19 @@
       </header>
       <div class="list-head"><span>Prueba</span><span>Récord</span></div>
       <div id="map-list"></div>
+      <div class="settings">
+        <div class="list-head"><span>Ajustes</span></div>
+        <button id="opt-blood" class="opt" type="button" aria-pressed="false">
+          <span class="opt-name">Sangre</span>
+          <span class="opt-desc">Salpicaduras, heridas y charcos. Desactivada por defecto.</span>
+          <span class="opt-val">NO</span>
+        </button>
+        <button id="opt-quality" class="opt" type="button">
+          <span class="opt-name">Calidad</span>
+          <span class="opt-desc">Automática baja la resolución si el juego va lento.</span>
+          <span class="opt-val">AUTO</span>
+        </button>
+      </div>
       <footer class="menu-foot"><span class="k">Esc</span> vuelve a este menú</footer>
     </div>
   </div>

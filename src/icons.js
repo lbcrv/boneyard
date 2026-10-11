@@ -15,6 +15,14 @@ export const ICONS = {
   barrel: wrap('<rect x="6" y="2.5" width="12" height="19"/><path d="M6 8h12M6 16h12"/>'),
   // box truck
   truck: wrap('<path d="M2 6h12v10H2z"/><path d="M14 10h4l3 3.5V16h-7"/><circle cx="6" cy="18" r="2" fill="currentColor"/><circle cx="17" cy="18" r="2" fill="currentColor"/>'),
+  // compact SMG: receiver, stock, magazine, barrel
+  smg: wrap('<path d="M3 9h13v4H3z"/><path d="M16 10h5"/><path d="M8 13v6h3v-6"/><path d="M3 9L2 14"/>'),
+  // shoulder tube with a rocket head
+  bazooka: wrap('<path d="M2 11h15v3H2z"/><path d="M17 10.5l4 2-4 2"/><path d="M7 14v4h2v-4"/>'),
+  // trefoil
+  nuke: wrap('<circle cx="12" cy="12" r="1.6" fill="currentColor" stroke="none"/><path d="M12 9.5L9.2 4.6a8 8 0 0 1 5.6 0z" fill="currentColor" stroke="none"/><path d="M14.2 13.3l5.6 0a8 8 0 0 1-2.8 4.8z" fill="currentColor" stroke="none"/><path d="M9.8 13.3l-2.8 4.8a8 8 0 0 1-2.8-4.8z" fill="currentColor" stroke="none"/>'),
+  // pressure mine: dome on a disc
+  mine: wrap('<path d="M3 17h18"/><path d="M5 17a7 5 0 0 1 14 0"/><path d="M12 9.5V7"/><circle cx="12" cy="6" r="1" fill="currentColor"/>'),
   // shock wave
   push: wrap('<path d="M2 12h7"/><path d="M12 6.5a7.5 7.5 0 0 1 0 11"/><path d="M16 3.5a12 12 0 0 1 0 17"/><path d="M20 1.5a16 16 0 0 1 0 21"/>'),
 };

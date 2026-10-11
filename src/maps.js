@@ -157,6 +157,7 @@ export const MAPS = [
     spawn: { pos: [0, 0, 2], yaw: 0 },
     killY: -18,
     timed: true,
+    mode: { kind: 'timed' },
     build() {
       // the void: a far-away sea
       const sea = new THREE.Mesh(new THREE.PlaneGeometry(600, 600), new THREE.MeshStandardMaterial({ color: 0x2b5b8a, roughness: 0.2, metalness: 0.3 }));
@@ -203,7 +204,7 @@ export const MAPS = [
         ring.position.set(0, 2.6, z);
         lv.decoMesh(ring);
         lv.trigger([0, 1, z], [4, 2, 0.6], (who) => {
-          if (who !== 'ragdoll' || L.checkpoint?.[2] >= z) return;
+          if (!who.isPlayer || L.checkpoint?.[2] >= z) return;
           L.checkpoint = [0, 0, z];
           ring.material = lv.stdMat(0xe0b13a, { emissive: 0xe0b13a, emissiveIntensity: 1.2 });
           fx.banner('PUNTO DE CONTROL');
@@ -211,7 +212,7 @@ export const MAPS = [
         }, { cooldown: 2 });
       }
       lv.trigger([0, 1, 90], [4, 2, 1.4], (who) => {
-        if (who !== 'ragdoll' || L.finished) return;
+        if (!who.isPlayer || L.finished) return;
         L.finished = true;
         L.onFinish?.();
       }, { cooldown: 5 });
@@ -284,6 +285,224 @@ export const MAPS = [
       crateWall(15, 34, 6, 3, 0.8, PI / 2);
     },
   },
+  // ======================================================================
+  {
+    id: 'dohyo',
+    name: 'Dohyō',
+    code: 'P-05',
+    desc: 'Sumo uno contra uno, a lo Sumotori Dreams. Sácalo del círculo o tíralo al suelo. Gana el primero en llegar a 3.',
+    env: { skyTop: '#9fb3c4', skyBottom: '#e9e2d3', fog: 0xe9e2d3, fogNear: 40, fogFar: 140, sun: [20, 45, 25] },
+    spawn: { pos: [0, 0.6, -1.7], yaw: 0 },
+    killY: -30,
+    mode: { kind: 'sumo', ring: { x: 0, z: 0, r: 4.55, top: 0.6 }, style: 'block', playerColor: 0xd8402a, rivals: [{ color: 0x2f5d8a, pos: [0, 0.6, 1.7], yaw: PI }], winScore: 3 },
+    build() {
+      lv.floor([160, 1, 160], [0, -0.5, 0], gridTexture('#c9b48a', '#b9a47a'), 0xffffff);
+      lv.staticCylinder(5.3, 5.9, 0.6, [0, 0.3, 0], 0xb59a6a);
+      // straw bales on the ring line
+      const straw = new THREE.Mesh(new THREE.TorusGeometry(4.55, 0.09, 8, 64), lv.stdMat(0xd8c48a, { roughness: 1 }));
+      straw.rotation.x = -PI / 2; straw.position.y = 0.62;
+      lv.decoMesh(straw);
+      for (const z of [-0.9, 0.9]) lv.decoMesh(at(new THREE.Mesh(new THREE.BoxGeometry(0.9, 0.02, 0.06), lv.stdMat(0xf2f2f2)), 0, 0.61, z));
+      // hanging roof (decor only)
+      const wood = lv.stdMat(0x4a3424, { roughness: 0.9 });
+      const roof = new THREE.Mesh(new THREE.CylinderGeometry(4.5, 8.5, 2.2, 4, 1), wood);
+      roof.position.y = 9.5; roof.rotation.y = PI / 4;
+      lv.decoMesh(roof);
+      lv.decoMesh(at(new THREE.Mesh(new THREE.BoxGeometry(11.6, 0.5, 11.6), lv.stdMat(0x5a1f2a, { roughness: 0.8 })), 0, 8.2, 0));
+      for (const [x, z, c] of [[5.8, 5.8, 0x2a5a3a], [-5.8, 5.8, 0xe8e4da], [-5.8, -5.8, 0x8a2a22], [5.8, -5.8, 0x111111]]) {
+        lv.decoMesh(at(new THREE.Mesh(new THREE.CylinderGeometry(0.18, 0.05, 1.4, 8), lv.stdMat(c)), x, 7.3, z));
+      }
+      for (let i = 0; i < 18; i++) {
+        const a = (i / 18) * PI * 2;
+        lv.staticBox([0.8, 0.12, 0.8], [Math.cos(a) * 9.5, 0.06, Math.sin(a) * 9.5], { color: i % 2 ? 0x5a1f2a : 0x2f5d8a, rot: [0, -a, 0] });
+      }
+    },
+  },
+
+  // ======================================================================
+  {
+    id: 'plataforma',
+    name: 'Plataforma',
+    code: 'P-06',
+    desc: 'Cuatro luchadores de bloques sobre una losa en el agua. El último que quede arriba gana la ronda.',
+    env: { skyTop: '#6f8fae', skyBottom: '#cfd8de', fog: 0xcfd8de, fogNear: 40, fogFar: 150, sun: [-20, 40, 15] },
+    spawn: { pos: [-2.8, 0, -2.8], yaw: PI / 4 },
+    killY: -20,
+    mode: {
+      kind: 'sumo4', bounds: { half: 5, top: 0 }, style: 'block', playerColor: 0xd8402a,
+      rivals: [
+        { color: 0x2f5d8a, pos: [2.8, 0, 2.8], yaw: -PI * 0.75 },
+        { color: 0x3c6b3a, pos: [2.8, 0, -2.8], yaw: -PI / 4 },
+        { color: 0xd9a92b, pos: [-2.8, 0, 2.8], yaw: PI * 0.75 },
+      ],
+      winScore: 3,
+    },
+    build() {
+      const sea = new THREE.Mesh(new THREE.PlaneGeometry(600, 600), new THREE.MeshStandardMaterial({ color: 0x2b4d6a, roughness: 0.15, metalness: 0.4 }));
+      sea.rotation.x = -PI / 2; sea.position.y = -6;
+      lv.decoMesh(sea);
+      lv.staticBox([10, 2, 10], [0, -1, 0], { mat: new THREE.MeshStandardMaterial({ map: gridTexture('#b8b4aa', '#a29e94', [3, 3]), roughness: 0.9 }) });
+      const edge = new THREE.MeshStandardMaterial({ map: hazardTexture([12, 1]), roughness: 0.7 });
+      for (const [x, z, w, d] of [[0, 5.05, 10.2, 0.1], [0, -5.05, 10.2, 0.1], [5.05, 0, 0.1, 10.2], [-5.05, 0, 0.1, 10.2]]) {
+        lv.decoMesh(at(new THREE.Mesh(new THREE.BoxGeometry(w, 2.02, d), edge), x, -1, z));
+      }
+      lv.staticBox([3, 6, 3], [0, -5, 0], { color: 0x5e5a54 });
+    },
+  },
+
+  // ======================================================================
+  {
+    id: 'muro',
+    name: 'Muro',
+    code: 'P-07',
+    desc: 'Pista de choque a lo Turbo Dismount. Elige vehículo, baja la rampa y estréllate contra el muro. Hay minas a medio camino.',
+    env: { skyTop: '#7f9cb8', skyBottom: '#e3e1da', fog: 0xe3e1da, fogNear: 80, fogFar: 260, sun: [30, 60, -20] },
+    spawn: { pos: [0, 8, -36], yaw: 0 },
+    killY: -30,
+    mode: { kind: 'crash' },
+    build() {
+      lv.floor([200, 1, 320], [0, -0.5, 60], gridTexture('#55585e', '#4a4d52'), 0xffffff);
+      lv.staticBox([8, 8, 10], [0, 4, -36], { color: 0x6f6c66 });
+      lv.staticBox([8, 0.5, 32], [0, 3.62, -15.54], { rot: [Math.atan2(8, 30), 0, 0], color: 0x8f8c86 });
+      for (let z = 0; z < 125; z += 6) lv.decoMesh(at(new THREE.Mesh(new THREE.BoxGeometry(0.25, 0.02, 3), lv.stdMat(0xf2f2f2)), 0, 0.01, z));
+      for (let z = 4; z < 118; z += 4.2) {
+        for (const x of [-7.5, 7.5]) lv.staticBox([0.6, 0.9, 4], [x, 0.45, z], { color: 0xb8b4aa });
+      }
+      lv.staticBox([4, 0.4, 6], [-3.2, 0.7, 58], { rot: [-0.24, 0, 0], color: 0xe0b13a });
+      for (let i = 0; i < 8; i++) lv.box([0.35, 0.6, 0.35], [3.5 - (i % 2) * 1.2, 0.3, 40 + i * 3], 2, 0xd9682b);
+      lv.staticBox([14, 5, 2], [0, 2.5, 126], { color: 0x8f8c86 });
+      lv.decoMesh(at(new THREE.Mesh(new THREE.BoxGeometry(14.02, 0.6, 2.02), new THREE.MeshStandardMaterial({ map: hazardTexture([10, 1]) })), 0, 4.4, 126));
+      crateWall(0, 120, 9, 4, 0.8);
+      for (const x of [-4, 4]) lv.barrel([x, 0.5, 117]);
+      cratePyramid(-5, 100, 3);
+    },
+    mines: [[1.5, 84], [-1.5, 86], [2.5, 89], [-2.8, 91], [0, 93], [3.2, 95], [-1, 97]],
+  },
+
+  // ======================================================================
+  {
+    id: 'cruce',
+    name: 'Cruce',
+    code: 'P-08',
+    desc: 'Un cruce con tráfico que no frena. Calcula cuándo bajar la rampa. O no.',
+    env: { skyTop: '#86a3bf', skyBottom: '#ece5d6', fog: 0xece5d6, fogNear: 80, fogFar: 260, sun: [-30, 55, 20] },
+    spawn: { pos: [0, 8, -36], yaw: 0 },
+    killY: -30,
+    mode: { kind: 'crash' },
+    build() {
+      lv.floor([260, 1, 320], [0, -0.5, 60], gridTexture('#6a6c66', '#5d5f59'), 0xffffff);
+      const asphalt = lv.stdMat(0x3f4246, { roughness: 0.95 });
+      lv.staticBox([12, 0.04, 180], [0, 0.02, 50], { mat: asphalt, castShadow: false });
+      lv.staticBox([220, 0.04, 14], [0, 0.03, 70], { mat: asphalt, castShadow: false });
+      for (let z = 0; z < 140; z += 6) if (Math.abs(z - 70) > 8) lv.decoMesh(at(new THREE.Mesh(new THREE.BoxGeometry(0.25, 0.02, 3), lv.stdMat(0xf2f2f2)), 0, 0.05, z));
+      for (let x = -100; x < 100; x += 6) if (Math.abs(x) > 8) lv.decoMesh(at(new THREE.Mesh(new THREE.BoxGeometry(3, 0.02, 0.25), lv.stdMat(0xe0b13a)), x, 0.06, 70));
+      lv.staticBox([8, 8, 10], [0, 4, -36], { color: 0x6f6c66 });
+      lv.staticBox([8, 0.5, 32], [0, 3.62, -15.54], { rot: [Math.atan2(8, 30), 0, 0], color: 0x8f8c86 });
+      // cross traffic: buses and trucks that loop forever
+      const colors = [0xd9a92b, 0x8a2a22, 0x3a4a5c, 0xe8e4da];
+      for (let i = 0; i < 6; i++) {
+        const dir = i % 2 ? 1 : -1;
+        const lane = dir > 0 ? 66.8 : 73.2;
+        const len = i % 3 === 0 ? 10 : 6;
+        const g = new THREE.Group();
+        const body = new THREE.Mesh(new THREE.BoxGeometry(len, 2.6, 2.4), lv.stdMat(colors[i % 4], { roughness: 0.5, metalness: 0.2 }));
+        body.position.y = 1.6;
+        const glass = new THREE.Mesh(new THREE.BoxGeometry(len * 0.9, 0.7, 2.42), lv.stdMat(0x1d2a35, { roughness: 0.1, metalness: 0.5 }));
+        glass.position.y = 2.2;
+        g.add(body, glass);
+        const speed = 13 + (i % 3) * 2;
+        const span = 220;
+        const off = i * 37;
+        lv.kinematic([lv.boxShape(len, 2.6, 2.4, [0, 1.6, 0])], g, (t) => {
+          const x = ((off + t * speed) % span) - span / 2;
+          return { pos: [x * dir, 0, lane], quat: new THREE.Quaternion() };
+        });
+      }
+      lv.staticBox([10, 0.3, 8], [16, 0.15, 84], { color: 0xb8b4aa });
+      for (const [x, z] of [[13, 82], [14, 83], [13.5, 84], [18, 86], [19, 85]]) lv.barrel([x, 0.8, z]);
+      lv.staticBox([0.3, 4, 0.3], [12, 2, 80], { color: 0xd8402a });
+      lv.staticBox([0.3, 4, 0.3], [20, 2, 80], { color: 0xd8402a });
+      lv.staticBox([9, 0.3, 7], [16, 4.1, 83], { color: 0xe8e4da });
+      lv.staticBox([4, 0.1, 1.6], [-8, 2.6, 60], { color: 0x3a3d42 });
+      lv.staticBox([0.1, 2.6, 1.6], [-10, 1.3, 60], { color: 0x3a3d42 });
+      for (let i = 0; i < 4; i++) lv.box([1.9, 1.3, 4.2], [-9, 0.65, 90 + i * 6], 900, [0x8a2a22, 0x3a4a5c, 0xb8b4aa, 0x2a2a2e][i]);
+      lv.staticBox([30, 12, 4], [0, 6, 142], { mat: new THREE.MeshStandardMaterial({ map: buildingTexture('#8a8f96', [6, 3]), roughness: 0.85 }) });
+      crateWall(0, 136, 8, 3, 0.8);
+    },
+  },
+
+  // ======================================================================
+  {
+    id: 'dojo',
+    name: 'Dojo',
+    code: 'P-09',
+    desc: 'Combate cuerpo a cuerpo por oleadas. Golpes, patadas, barridos y contraataques en el momento justo.',
+    env: { skyTop: '#41506a', skyBottom: '#d6a77a', fog: 0xb08a6c, fogNear: 30, fogFar: 110, sun: [25, 35, -15] },
+    spawn: { pos: [0, 0, -4], yaw: 0 },
+    killY: -30,
+    mode: { kind: 'dojo' },
+    build() {
+      lv.floor([120, 1, 120], [0, -0.5, 0], gridTexture('#6f6a5e', '#625d52'), 0xffffff);
+      lv.staticBox([22, 0.02, 22], [0, 0.01, 0], { mat: new THREE.MeshStandardMaterial({ map: plankTexture(), roughness: 0.75 }), castShadow: false });
+      const stone = lv.stdMat(0x7a756b, { roughness: 1 });
+      for (const [x, z, w, d] of [[0, 12, 24, 1], [0, -12, 24, 1], [12, 0, 1, 24], [-12, 0, 1, 24]]) lv.staticBox([w, 2.4, d], [x, 1.2, z], { mat: stone });
+      const tile = lv.stdMat(0x3a3330, { roughness: 0.8 });
+      for (const [x, z, w, d] of [[0, 12, 25, 2.2], [0, -12, 25, 2.2], [12, 0, 2.2, 25], [-12, 0, 2.2, 25]]) lv.decoMesh(at(new THREE.Mesh(new THREE.BoxGeometry(w, 0.25, d), tile), x, 2.55, z));
+      for (const [x, z] of [[9, 9], [-9, 9], [9, -9], [-9, -9]]) {
+        lv.staticBox([0.3, 1.6, 0.3], [x, 0.8, z], { color: 0x5e5a54 });
+        lv.decoMesh(at(new THREE.Mesh(new THREE.BoxGeometry(0.6, 0.6, 0.6), lv.stdMat(0xf2d6a0, { emissive: 0xf2b060, emissiveIntensity: 0.8 })), x, 1.9, z));
+      }
+      for (const [x, z] of [[-7, 5], [7, 5]]) lv.staticBox([0.25, 2, 0.25], [x, 1, z], { color: 0x6b4a2a });
+      for (const [x, z] of [[-8, -6], [8, -6]]) lv.box([0.5, 1.2, 0.5], [x, 0.6, z], 25, 0x8a6a3a);
+      for (const [x, z] of [[16, 8], [-17, -5], [15, -14], [-14, 15]]) {
+        lv.staticBox([0.5, 4, 0.5], [x, 2, z], { color: 0x4a3424 });
+        const crown = new THREE.Mesh(new THREE.IcosahedronGeometry(2.4, 1), lv.stdMat(0xd8a0b0, { roughness: 0.9 }));
+        crown.position.set(x, 5, z);
+        crown.castShadow = true;
+        lv.decoMesh(crown);
+      }
+    },
+  },
+
+  // ======================================================================
+  {
+    id: 'minas',
+    name: 'Campo minado',
+    code: 'P-10',
+    desc: '60 metros de campo con 70 minas enterradas. Crúzalo hasta la bandera. Cronometrado.',
+    env: { skyTop: '#8a9aa8', skyBottom: '#d9d4c4', fog: 0xcfc9b6, fogNear: 50, fogFar: 160, sun: [15, 40, 30] },
+    spawn: { pos: [0, 0, -34], yaw: 0 },
+    killY: -30,
+    timed: true,
+    mode: { kind: 'timed' },
+    build() {
+      lv.floor([160, 1, 160], [0, -0.5, 0], gridTexture('#6f7458', '#646a4e'), 0xffffff);
+      for (let z = -30; z <= 32; z += 4) {
+        for (const x of [-12, 12]) {
+          lv.staticBox([0.12, 1.3, 0.12], [x, 0.65, z], { color: 0x5a4632 });
+          lv.decoMesh(at(new THREE.Mesh(new THREE.BoxGeometry(0.03, 0.03, 4), lv.stdMat(0x777777, { metalness: 0.7 })), x, 1.1, z + 2));
+        }
+      }
+      for (const x of [-3, 3]) {
+        lv.staticBox([0.08, 1.4, 0.08], [x, 0.7, -31], { color: 0x5a4632 });
+        const sign = new THREE.Mesh(new THREE.PlaneGeometry(0.8, 0.8), new THREE.MeshStandardMaterial({ map: mineSignTexture(), side: THREE.DoubleSide }));
+        sign.position.set(x, 1.5, -31); sign.rotation.z = PI / 4;
+        lv.decoMesh(sign);
+      }
+      lv.box([1.9, 1.3, 4.2], [-6, 0.65, 4], 900, 0x4a4f3a, [0, 0.4, 0]);
+      for (const [x, z] of [[5, -12], [-4, 18], [7, 22]]) lv.barrel([x, 0.5, z]);
+      lv.staticBox([8, 0.1, 4], [0, 0.05, 34], { mat: new THREE.MeshStandardMaterial({ map: checkerTexture(), roughness: 0.6 }) });
+      lv.flag([3, 0, 34]);
+      lv.flag([-3, 0, 34], 0xe8e4da);
+      lv.trigger([0, 1, 34], [4, 2, 2], (who) => {
+        if (!who.isPlayer || L.finished) return;
+        L.finished = true;
+        L.onFinish?.();
+      }, { cooldown: 5 });
+    },
+    mines: 'field',
+  },
+
 ];
 
 function checkerTexture() {
@@ -328,4 +547,35 @@ function car(pos, color, yaw) {
   ], pos, 900, g, { rot: [0, yaw, 0], material: MAT.vehicle });
   L.props.push(b);
   return b;
+}
+
+function plankTexture() {
+  const c = document.createElement('canvas');
+  c.width = c.height = 256;
+  const g = c.getContext('2d');
+  for (let i = 0; i < 8; i++) {
+    g.fillStyle = ['#9c7a52', '#a8845a', '#94724c', '#a07d55'][i % 4];
+    g.fillRect(0, i * 32, 256, 32);
+    g.fillStyle = 'rgba(40,25,10,.45)'; g.fillRect(0, i * 32 + 31, 256, 1);
+    g.fillRect(((i * 97) % 200) + 20, i * 32, 1, 32);
+  }
+  for (let i = 0; i < 400; i++) { g.fillStyle = `rgba(60,40,20,${Math.random() * 0.08})`; g.fillRect(Math.random() * 256, Math.random() * 256, 30, 1); }
+  const t = new THREE.CanvasTexture(c);
+  t.wrapS = t.wrapT = THREE.RepeatWrapping;
+  t.repeat.set(5, 5);
+  t.colorSpace = THREE.SRGBColorSpace;
+  return t;
+}
+
+function mineSignTexture() {
+  const c = document.createElement('canvas');
+  c.width = c.height = 128;
+  const g = c.getContext('2d');
+  g.fillStyle = '#d8402a'; g.fillRect(0, 0, 128, 128);
+  g.fillStyle = '#f4f1ea'; g.fillRect(8, 8, 112, 112);
+  g.fillStyle = '#111'; g.font = 'bold 30px sans-serif'; g.textAlign = 'center'; g.textBaseline = 'middle';
+  g.save(); g.translate(64, 64); g.rotate(-Math.PI / 4); g.fillText('MINAS', 0, 0); g.restore();
+  const t = new THREE.CanvasTexture(c);
+  t.colorSpace = THREE.SRGBColorSpace;
+  return t;
 }

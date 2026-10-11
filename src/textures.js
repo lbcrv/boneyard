@@ -105,9 +105,9 @@ export function buildingTexture(base = '#7d8592', repeat = [3, 8]) {
   }, { repeat });
 }
 
-export function headTexture() {
-  return canvasTex('head', 256, 128, (g, w, h) => {
-    g.fillStyle = '#f2c14e'; g.fillRect(0, 0, w, h);
+export function headTexture(base = '#f2c14e') {
+  return canvasTex('head' + base, 256, 128, (g, w, h) => {
+    g.fillStyle = base; g.fillRect(0, 0, w, h);
     // crash test dummy quadrant markers on the sides
     for (const cx of [w * 0.25, w * 0.75]) {
       const cy = h * 0.5, r = 26;
@@ -122,9 +122,9 @@ export function headTexture() {
   });
 }
 
-export function torsoTexture() {
-  return canvasTex('torso', 128, 128, (g, w, h) => {
-    g.fillStyle = '#f2c14e'; g.fillRect(0, 0, w, h);
+export function torsoTexture(base = '#f2c14e') {
+  return canvasTex('torso' + base, 128, 128, (g, w, h) => {
+    g.fillStyle = base; g.fillRect(0, 0, w, h);
     noise(g, w, h, 150, 0.05);
     g.fillStyle = '#1d1d1d';
     g.fillRect(0, h * 0.42, w, 10);

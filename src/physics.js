@@ -6,16 +6,20 @@ export const GROUP = {
   RAGDOLL: 2,
   PROP: 4,
   PROJ: 8,
+  VEHICLE: 16,
   NONE: 0,
 };
-export const MASK_ALL = GROUP.STATIC | GROUP.RAGDOLL | GROUP.PROP | GROUP.PROJ;
+export const MASK_ALL = GROUP.STATIC | GROUP.RAGDOLL | GROUP.PROP | GROUP.PROJ | GROUP.VEHICLE;
+
+// A bit above Earth's 9.81: at this scale real gravity reads as floaty on screen.
+export const GRAVITY = 12.5;
 
 export const FIXED_DT = 1 / 120;
 
-export const world = new CANNON.World({ gravity: new CANNON.Vec3(0, -9.82, 0) });
+export const world = new CANNON.World({ gravity: new CANNON.Vec3(0, -GRAVITY, 0) });
 world.broadphase = new CANNON.SAPBroadphase(world);
 world.allowSleep = true;
-world.solver.iterations = 18;
+world.solver.iterations = 14;
 world.solver.tolerance = 1e-7;
 world.quatNormalizeFast = false;
 world.quatNormalizeSkip = 0;
