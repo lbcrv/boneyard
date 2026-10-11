@@ -111,6 +111,15 @@ export const STATE_LABEL = {
   wrecked: 'NO PUEDE LEVANTARSE', seated: 'SENTADO', crouch: 'AGACHADO', attack: 'ATACANDO', emote: 'BAILANDO',
 };
 
+function groundHit(x, z, yTop, yBot) {
+  rayFrom.set(x, yTop, z);
+  rayTo.set(x, yBot, z);
+  rayResult.reset();
+  if (!world.raycastClosest(rayFrom, rayTo, RAY_OPTS, rayResult)) return null;
+  const n = rayResult.hitNormalWorld;
+  return { y: rayResult.hitPointWorld.y, body: rayResult.body, normal: new THREE.Vector3(n.x, n.y, n.z) };
+}
+
 function groundAt(x, z, yTop, yBot) {
   rayFrom.set(x, yTop, z);
   rayTo.set(x, yBot, z);
@@ -137,6 +146,8 @@ export class Ragdoll {
     this.grips = { L: null, R: null };
     this.skeleton = new Skeleton();
     this.feet = { L: null, R: null };
+    this.plants = { L: null, R: null };
+    this.tune = { upright: 1, runBlend: 0.32, runLead: 0.42, lean: 0.03, hipReaction: 1, trunkGain: 6 };
     this.pendingHits = [];
     this.pendingGrips = [];
     this.build();
@@ -146,6 +157,7 @@ export class Ragdoll {
 
   dispose() {
     this.releaseGrip('L'); this.releaseGrip('R');
+    this.unplantAll();
     for (const j of this.joints) world.removeConstraint(j.constraint);
     for (const p of this.parts) {
       world.removeBody(p.body);
@@ -279,7 +291,7 @@ export class Ragdoll {
         });
       }
       world.addConstraint(c);
-      const j = { ...jd, P, C, constraint: c, target: new THREE.Quaternion(), broken: false, weak: 1 };
+      const j = { ...jd, P, C, constraint: c, target: new THREE.Quaternion(), prevTarget: new THREE.Quaternion(), broken: false, weak: 1, hipJoint: jd.name.startsWith('hip') };
       this.joints.push(j);
       this.jointMap[jd.name] = j;
       C.joint = j;
@@ -288,6 +300,7 @@ export class Ragdoll {
 
   // ---------------------------------------------------------------- reset
   reset(pos, yaw) {
+    this.unplantAll();
     const q = new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0, 1, 0), yaw);
     for (const p of this.parts) {
       const wp = p.restPos.clone().applyQuaternion(q).add(pos);
@@ -302,7 +315,7 @@ export class Ragdoll {
       p.hurt = 0; p.wounds = 0;
       p.mat.color.copy(p.baseColor);
     }
-    for (const j of this.joints) { j.broken = false; j.weak = 1; j.target.identity(); }
+    for (const j of this.joints) { j.broken = false; j.weak = 1; j.target.identity(); j.prevTarget.identity(); }
     this.releaseGrip('L'); this.releaseGrip('R');
     this.skeleton.reset();
     Object.assign(this, {
@@ -320,10 +333,16 @@ export class Ragdoll {
   }
 
   initFeet() {
+    this.unplantAll();
     for (const S of ['L', 'R']) {
       const f = this.partMap['foot' + S].body.position;
-      const plant = new THREE.Vector3(f.x, f.y + 0.045, f.z);
-      this.feet[S] = { plant, g: f.y - 0.035, swing: false, t: 0, from: plant.clone(), to: plant.clone(), gFrom: f.y - 0.035, gTo: f.y - 0.035, cur: plant.clone() };
+      const hit = groundHit(f.x, f.z, f.y + 0.3, f.y - 1.5);
+      const g = hit ? hit.y : f.y - 0.035;
+      const plant = new THREE.Vector3(f.x, g + 0.075, f.z);
+      this.feet[S] = {
+        plant, g, swing: false, t: 0, from: plant.clone(), to: plant.clone(), gFrom: g, gTo: g, cur: plant.clone(),
+        plantBody: hit ? hit.body : null, normal: hit ? hit.normal : null,
+      };
     }
     this.swingSide = null;
   }
@@ -380,7 +399,7 @@ export class Ragdoll {
     if (otherRag && this.diveT > 0 && v > 2) otherRag.pendingKnock = { by: this, v: 6 };
     const otherMass = other.type === CANNON.Body.DYNAMIC ? other.mass : 1e9;
     const massFactor = Math.min(1, 0.35 + otherMass / 60);
-    this.pendingHits.push({ part, v: v * massFactor, point, other, otherRag, focus: 1 });
+    this.pendingHits.push({ part, v: v * massFactor, point, other, otherRag, focus: 1, ny: Math.abs(c.ni.y) });
   }
 
   processHits() {
@@ -415,6 +434,7 @@ export class Ragdoll {
     if (standing && isLeg && !h.kind && staticHit && v < 9.5) {
       if (isFoot && v > 1.2) this.events.push({ type: 'step', v, point, rag: this });
       // legs clipping a step edge: a walk shrugs it off, a sprint trips over it
+      if (h.ny > 0.8) return; // landing on top of something, not clipping its edge
       if (this.time - (this.legHitAt || 0) < 0.15) return; // one bump per footfall, not per contact point
       this.legHitAt = this.time;
       const hs = Math.hypot(this.pelvis.velocity.x, this.pelvis.velocity.z);
@@ -488,6 +508,7 @@ export class Ragdoll {
   }
 
   goFall(reason = '') {
+    this.unplantAll();
     if (this.state === 'limp' || this.state === 'seated') return;
     if (this.state !== 'fall') {
       this.state = 'fall';
@@ -755,6 +776,9 @@ export class Ragdoll {
       if (this.tiltT > 0.12) this.goFall('tilt');
       if (this.airT > 1.0 || (!this.grounded && vel.y < -9)) this.goFall('air');
       if (this.cannotStand()) this.goFall('legs');
+      // pinned at the edge of balance for too long: down he goes
+      this.wobbleT = this.stumble > 0.9 ? (this.wobbleT || 0) + dt : 0;
+      if (this.wobbleT > 0.45) { this.wobbleT = 0; this.goFall('stumble'); }
       if (hit && heightAbove < 2.2 && this.groundRate < -1.6 && hSpeed > 3.0) {
         this.trip += dt * (hSpeed > 5 ? 1.6 : 1);
         this.stumble = Math.min(1, this.stumble + dt * 2.5);
@@ -830,7 +854,7 @@ export class Ragdoll {
 
     // ---- desired movement
     const moveLen = Math.hypot(input.moveX || 0, input.moveZ || 0);
-    const wantSpeed = moveLen > 0.01 ? (input.run ? 6.6 : 2.6) * (this.crouching ? 0.45 : 1) : 0;
+    const wantSpeed = moveLen > 0.01 ? (input.run ? 5.8 : 1.8) * (this.crouching ? 0.5 : 1) : 0;
     let dvx = 0, dvz = 0;
     if (moveLen > 0.01 && this.state === 'stand') {
       dvx = (input.moveX / moveLen) * wantSpeed;
@@ -850,6 +874,7 @@ export class Ragdoll {
 
     // ---- feet & pose
     if (this.state === 'stand') this.updateGait(dt, vel, hSpeed);
+    else if (this.plants.L || this.plants.R) this.unplantAll();
     this.computePose(dt, hSpeed, vel);
 
     // ---- muscles
@@ -859,12 +884,12 @@ export class Ragdoll {
     // ---- balance cheats
     const b = this.balance;
     if (b > 0.01) {
-      const lean = this.state === 'stand' ? 0.03 : 0;
+      const lean = this.state === 'stand' ? this.tune.lean : 0;
       v4.set(dvx * lean, 1, dvz * lean).normalize();
       const yawStrength = this.state === 'getup' ? 0.4 : 1;
-      this.upright(this.pelvis, v4, this.yawTarget, b, 1100, yawStrength, dt);
+      this.upright(this.pelvis, v4, this.yawTarget, b, 1400 * this.tune.upright, yawStrength, dt, this.tune.trunkGain);
       this.upright(this.partMap.abdomen.body, v4, this.yawTarget, b * 0.6, 300, yawStrength, dt);
-      this.upright(this.chest, v4, this.yawTarget, b, 680, yawStrength, dt);
+      this.upright(this.chest, v4, this.yawTarget, b, 900 * this.tune.upright, yawStrength, dt, this.tune.trunkGain);
       this.upright(this.head, v4, this.yawTarget, b * 0.5, 40, 0.4, dt);
 
       if (this.grounded) {
@@ -888,12 +913,18 @@ export class Ragdoll {
         const al = Math.hypot(ax, az), amax = 11;
         if (al > amax) { ax *= amax / al; az *= amax / al; }
         const hb = this.state === 'getup' ? b * 0.3 : b;
-        const M = this.totalMass;
+        // lift goes through the trunk; the horizontal drive goes to every
+        // segment by mass, so the legs travel with the body instead of being
+        // towed behind it (which pitched him forward like he was dragged)
         const shares = [[this.pelvis, 0.45], [this.partMap.abdomen.body, 0.15], [this.chest, 0.4]];
-        for (const [body, s] of shares) {
-          body.force.x += M * ax * hb * s;
-          body.force.y += Fy * s;
-          body.force.z += M * az * hb * s;
+        for (const [body, s] of shares) body.force.y += Fy * s;
+        const pinnedL = this.plants.L ? this.partMap.footL.body : null;
+        const pinnedR = this.plants.R ? this.partMap.footR.body : null;
+        for (const p of this.parts) {
+          if (p.body === pinnedL || p.body === pinnedR) continue; // a planted foot stays put
+          const m = p.body.mass;
+          p.body.force.x += m * ax * hb;
+          p.body.force.z += m * az * hb;
         }
       } else if (this.state === 'stand') {
         const ax = (dvx - vel.x) * 1.4, az = (dvz - vel.z) * 1.4;
@@ -911,24 +942,35 @@ export class Ragdoll {
   }
 
   // ---------------------------------------------------------------- stepping planner + leg IK
+  /*
+   * Each foot is either PLANTED or SWINGING.
+   * - Planted: pinned to whatever it stands on (ground, a crate, a moving
+   *   platform) with a force-limited joint. If that thing moves, the foot goes
+   *   with it; a hard shove makes the pin give and the foot slips.
+   * - Swinging: the foot body is steered along an arc to a foothold found by a
+   *   ray (top of the next step, a crate lid...). It is still physical: clip a
+   *   step edge and it catches.
+   * The pelvis rides at leg height over the average of the two footholds.
+   */
   updateGait(dt, vel, hSpeed) {
     const P = this.pelvis.position;
     const yaw = this.yawOf(this.pelvis);
     const lx = Math.cos(yaw), lz = -Math.sin(yaw); // character's left
-    const stepDur = Math.max(0.2, Math.min(0.42, 0.42 - hSpeed * 0.036));
-    const lead = stepDur * 0.62;
-    const moving = hSpeed > 0.35;
+    const fx = Math.sin(yaw), fz = Math.cos(yaw);   // forward
+    const run = hSpeed > 3.2;
+    const stepDur = run ? Math.max(0.24, 0.34 - (hSpeed - 3.2) * 0.03) : Math.max(0.36, 0.5 - hSpeed * 0.06);
+    const moving = hSpeed > 0.3;
     this.sinceStep += dt;
     const ideal = {};
     for (const [S, sx] of [['L', 1], ['R', -1]]) {
-      const w = this.crouching ? 0.17 : 0.11;
+      const w = this.crouching ? 0.17 : 0.105;
+      // land the foot ahead of the hip by half a stride so the body passes over it
+      // running feet land closer under the body than walking ones
+      const lead = run ? stepDur * this.tune.runLead : stepDur * 0.5 + 0.03;
       ideal[S] = [P.x + lx * w * sx + vel.x * lead, P.z + lz * w * sx + vel.z * lead];
     }
-    const ground = (x, z, fallback) => {
-      const g = groundAt(x, z, P.y + 0.45, P.y - 2.3);
-      return g === null ? fallback - 0.35 : g;
-    };
 
+    // pick the next foot to move
     if (!this.swingSide) {
       const err = {};
       for (const S of ['L', 'R']) {
@@ -936,37 +978,105 @@ export class Ragdoll {
         err[S] = Math.hypot(f.x - ideal[S][0], f.z - ideal[S][1]);
       }
       let pick = err.L > err.R ? 'L' : 'R';
-      if (moving && pick === this.lastSwing && err[pick === 'L' ? 'R' : 'L'] > 0.05) pick = pick === 'L' ? 'R' : 'L';
-      const thresh = moving ? 0.08 : 0.2;
-      if (err[pick] > thresh && this.sinceStep > stepDur * 0.15) {
+      if (moving && pick === this.lastSwing) pick = pick === 'L' ? 'R' : 'L';
+      const thresh = moving ? 0.06 : 0.17;
+      const rest = run ? 0.0 : 0.05; // walking has a moment of double support
+      if (err[pick] > thresh && this.sinceStep > rest) {
         const f = this.feet[pick];
         f.swing = true; f.t = 0; f.from.copy(f.plant); f.gFrom = f.g;
+        this.unplant(pick);
         this.swingSide = pick;
       }
     }
 
     let gSum = 0;
-    for (const S of ['L', 'R']) {
+    for (const [S, sx] of [['L', 1], ['R', -1]]) {
       const f = this.feet[S];
+      const foot = this.partMap['foot' + S].body;
       if (f.swing) {
         f.t += dt / stepDur;
-        const gT = ground(ideal[S][0], ideal[S][1], f.g);
+        const hitG = groundHit(ideal[S][0], ideal[S][1], P.y + 0.5, P.y - 2.3);
+        let gT = hitG ? hitG.y : f.g - 0.35;
+        // too high to step onto (a wall, a tall box): keep the foot where it can go
+        if (gT > f.gFrom + 0.55) gT = f.gFrom;
         f.gTo = gT;
-        f.to.set(ideal[S][0], gT + 0.07, ideal[S][1]);
+        f.toBody = hitG ? hitG.body : null;
+        f.toNormal = hitG ? hitG.normal : null;
+        f.to.set(ideal[S][0], gT + 0.075, ideal[S][1]);
         const k = Math.min(1, f.t);
         const s = k * k * (3 - 2 * k);
         f.cur.lerpVectors(f.from, f.to, s);
-        const lift = 0.07 + Math.min(0.12, hSpeed * 0.02) + Math.max(0, f.to.y - f.from.y) * 1.1;
-        f.cur.y += Math.sin(Math.PI * k) * lift;
+        const clear = 0.09 + Math.min(0.1, hSpeed * 0.015) + Math.max(0, f.to.y - f.from.y);
+        f.cur.y += Math.sin(Math.PI * Math.min(1, k * 1.15)) * clear;
         gSum += f.gFrom + (f.gTo - f.gFrom) * s;
+
+        // steer the real foot along the arc (velocity blend, still collides)
+        const tx = f.cur.x + fx * 0.055, ty = f.cur.y - 0.04, tz = f.cur.z + fz * 0.055;
+        let vx = (tx - foot.position.x) / Math.max(dt, 0.004), vy = (ty - foot.position.y) / Math.max(dt, 0.004), vz = (tz - foot.position.z) / Math.max(dt, 0.004);
+        const vm = Math.hypot(vx, vy, vz), VMAX = run ? 14 : 7;
+        if (vm > VMAX) { vx *= VMAX / vm; vy *= VMAX / vm; vz *= VMAX / vm; }
+        const blend = run ? this.tune.runBlend : 0.3;
+        foot.velocity.x += (vx - foot.velocity.x) * blend;
+        foot.velocity.y += (vy - foot.velocity.y) * blend;
+        foot.velocity.z += (vz - foot.velocity.z) * blend;
+
         if (f.t >= 1) {
           f.swing = false; f.plant.copy(f.to); f.g = f.gTo;
           this.lastSwing = S; this.swingSide = null; this.sinceStep = 0;
           this.phase += Math.PI;
+          f.plantBody = f.toBody; f.normal = f.toNormal;
+          this.events.push({ type: 'footfall', side: S, rag: this });
         }
       } else {
         f.cur.copy(f.plant);
         gSum += f.g;
+        if (run) {
+          // running has a flight phase: the back foot toes off instead of
+          // staying stuck to the ground while the body runs away from it
+          if (this.plants[S]) this.unplant(S);
+          const hx = P.x + lx * 0.095 * sx, hz = P.z + lz * 0.095 * sx;
+          const behind = -((f.plant.x - hx) * fx + (f.plant.z - hz) * fz);
+          if (behind > 0.4) {
+            const ex = behind - 0.4;
+            f.cur.x += fx * ex; f.cur.z += fz * ex;
+            f.cur.y += Math.min(0.25, ex * 0.6);
+          }
+        }
+        // pin the foot once it is actually on something (walking and standing)
+        if (!run && !this.plants[S] && f.plantBody && foot.position.y - f.g < 0.09) this.plantFoot(S, f.plantBody);
+        // a pinned foot follows what it stands on (crates, platforms)
+        const pl = this.plants[S];
+        if (pl && pl.body.type !== CANNON.Body.STATIC) {
+          const w = pl.body.pointToWorldFrame(pl.c.pivotB, new CANNON.Vec3());
+          f.plant.set(w.x, w.y + 0.04, w.z); f.g = w.y;
+          // something rolling or sliding under the foot throws him off balance
+          if (pl.body.type === CANNON.Body.DYNAMIC) {
+            const bv = pl.body.velocity, wv = pl.body.angularVelocity;
+            const spd = Math.hypot(bv.x, bv.z) + Math.hypot(wv.x, wv.z) * 0.25;
+            if (spd > 0.6) {
+              this.stumble = Math.min(1, this.stumble + dt * (spd - 0.6) * 3);
+              if (spd > 2.2) {
+                this.unplant(S);
+                this.stumble = Math.min(1, this.stumble + 0.35);
+                // the foot shoots out the way the thing is moving
+                foot.velocity.x += bv.x * 0.8; foot.velocity.z += bv.z * 0.8;
+              }
+            }
+          }
+        }
+        // shoved too hard: the pin gives and the foot slides
+        if (pl) {
+          let sat = 0;
+          for (const eq of pl.c.equations) sat = Math.max(sat, Math.abs(eq.multiplier) / eq.maxForce);
+          pl.satT = sat > 0.97 ? pl.satT + dt : 0;
+          if (pl.satT > 0.12) {
+            this.unplant(S);
+            f.plant.set(foot.position.x, f.g + 0.075, foot.position.z);
+            this.stumble = Math.min(1, this.stumble + 0.25);
+          }
+        }
+        // sole flush with the surface (slopes, ramp edges)
+        if (f.normal) this.upright(foot, f.normal, yaw, 1, 60, 1, dt);
       }
     }
     const ref = gSum / 2;
@@ -974,6 +1084,25 @@ export class Ragdoll {
     const sw = this.swingSide ? this.feet[this.swingSide].t : 0;
     this.gaitPhase = this.phase + (this.swingSide ? Math.PI * Math.min(1, sw) : 0);
   }
+
+  plantFoot(S, onBody) {
+    this.unplant(S);
+    if (!onBody || !onBody.world) return;
+    const foot = this.partMap['foot' + S].body;
+    const sole = new CANNON.Vec3(0, -0.035, 0.02);
+    const w = foot.pointToWorldFrame(sole, new CANNON.Vec3());
+    const pivotB = onBody.pointToLocalFrame(w, new CANNON.Vec3());
+    const c = new CANNON.PointToPointConstraint(foot, sole, onBody, pivotB, 1100);
+    world.addConstraint(c);
+    this.plants[S] = { c, body: onBody, satT: 0 };
+  }
+
+  unplant(S) {
+    const pl = this.plants[S];
+    if (pl) { world.removeConstraint(pl.c); this.plants[S] = null; }
+  }
+
+  unplantAll() { this.unplant('L'); this.unplant('R'); }
 
   legIK(S, target) {
     const sx = S === 'L' ? 1 : -1;
@@ -1018,7 +1147,7 @@ export class Ragdoll {
     }
 
     if (st === 'stand' || (st === 'getup' && this.stateT > 1.0)) {
-      const L = Math.min(1, hSpeed / 6.6);
+      const L = Math.min(1, hSpeed / 5.8);
       const walk = Math.min(1, hSpeed / 0.9);
       const ph = this.gaitPhase || 0;
 
@@ -1245,10 +1374,27 @@ export class Ragdoll {
 
   // ---------------------------------------------------------------- servos
   servo(j, dt, strength) {
+    // feed-forward: how fast the target pose itself is moving (parent frame).
+    // Without it a servo chasing a moving target (a leg sweeping back under a
+    // runner) lags behind and brakes against the ground.
+    qe.copy(j.prevTarget).invert().premultiply(j.target);
+    j.prevTarget.copy(j.target);
+    if (qe.w < 0) { qe.x = -qe.x; qe.y = -qe.y; qe.z = -qe.z; qe.w = -qe.w; }
+    let ffx = 0, ffy = 0, ffz = 0;
+    {
+      const w0 = Math.min(1, qe.w), sh = Math.sqrt(Math.max(0, 1 - w0 * w0));
+      if (sh > 1e-6 && dt > 0) {
+        let rate = (2 * Math.acos(w0)) / dt;
+        if (rate > 14) rate = 0; // a pose switch, not motion: no feed-forward
+        ffx = (qe.x / sh) * rate; ffy = (qe.y / sh) * rate; ffz = (qe.z / sh) * rate;
+      }
+    }
     const s = j.broken ? 0 : strength;
     if (s <= 0.001) return;
     const P = j.P.body, C = j.C.body;
     qp.set(P.quaternion.x, P.quaternion.y, P.quaternion.z, P.quaternion.w);
+    // parent frame -> world
+    v1.set(ffx, ffy, ffz).applyQuaternion(qp);
     qc.set(C.quaternion.x, C.quaternion.y, C.quaternion.z, C.quaternion.w);
     qt.multiplyQuaternions(qp, j.target);
     qc.invert();
@@ -1263,9 +1409,9 @@ export class Ragdoll {
     } else { ex = qe.x * 2; ey = qe.y * 2; ez = qe.z * 2; }
     const wn = j.wn * (0.45 + 0.55 * s);
     const gain = 0.55;
-    const dwx = (ex * wn - (C.angularVelocity.x - P.angularVelocity.x)) * gain;
-    const dwy = (ey * wn - (C.angularVelocity.y - P.angularVelocity.y)) * gain;
-    const dwz = (ez * wn - (C.angularVelocity.z - P.angularVelocity.z)) * gain;
+    const dwx = (ex * wn + v1.x - (C.angularVelocity.x - P.angularVelocity.x)) * gain;
+    const dwy = (ey * wn + v1.y - (C.angularVelocity.y - P.angularVelocity.y)) * gain;
+    const dwz = (ez * wn + v1.z - (C.angularVelocity.z - P.angularVelocity.z)) * gain;
     const mag = Math.hypot(dwx, dwy, dwz);
     if (mag < 1e-6) return;
     const nx = dwx / mag, ny = dwy / mag, nz = dwz / mag;
@@ -1274,7 +1420,10 @@ export class Ragdoll {
     const Jmax = j.torque * s * dt;
     if (J > Jmax) J = Jmax;
     applyAngularImpulse(C, nx * J, ny * J, nz * J);
-    applyAngularImpulse(P, -nx * J, -ny * J, -nz * J);
+    // while balancing, the hip's push on the pelvis is soaked up by the balance
+    // layer (a real body would push it into the ground through the foot)
+    const react = j.hipJoint && this.balance > 0.5 ? this.tune.hipReaction : 1;
+    applyAngularImpulse(P, -nx * J * react, -ny * J * react, -nz * J * react);
   }
 
   hingeLimit(j, dt) {
@@ -1301,7 +1450,7 @@ export class Ragdoll {
     applyAngularImpulse(P, -v2.x * J, -v2.y * J, -v2.z * J);
   }
 
-  upright(body, upDes, yawDes, strength, maxTorque, yawStrength, dt) {
+  upright(body, upDes, yawDes, strength, maxTorque, yawStrength, dt, inertiaGain = 1) {
     qc.set(body.quaternion.x, body.quaternion.y, body.quaternion.z, body.quaternion.w);
     const up = v2.set(0, 1, 0).applyQuaternion(qc);
     const cx = up.y * upDes.z - up.z * upDes.y;
@@ -1324,7 +1473,9 @@ export class Ragdoll {
     const mag = Math.hypot(dwx, dwy, dwz);
     if (mag < 1e-6) return;
     const nx = dwx / mag, ny = dwy / mag, nz = dwz / mag;
-    let J = mag / invInertiaAlong(body, nx, ny, nz);
+    // inertiaGain: the trunk segments drag the rest of the body with them, so
+    // their effective inertia is several times their own
+    let J = (mag / invInertiaAlong(body, nx, ny, nz)) * inertiaGain;
     const Jmax = maxTorque * strength * dt;
     if (J > Jmax) J = Jmax;
     applyAngularImpulse(body, nx * J, ny * J, nz * J);

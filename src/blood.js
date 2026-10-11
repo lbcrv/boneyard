@@ -62,7 +62,11 @@ export function initBlood(s) {
   splats.instanceColor = new THREE.InstancedBufferAttribute(new Float32Array(MAX_SPLATS * 3), 3);
   splats.frustumCulled = false; splats.count = 0;
   splats.receiveShadow = true;
-  wounds = new THREE.InstancedMesh(new THREE.SphereGeometry(1, 8, 6), new THREE.MeshStandardMaterial({ color: 0x4a0606, roughness: 0.3 }), MAX_WOUNDS);
+  // wounds are flat stains laid on the body surface, not blobs sticking out
+  wounds = new THREE.InstancedMesh(new THREE.PlaneGeometry(1, 1), new THREE.MeshStandardMaterial({
+    color: 0x3a0505, alphaMap: tex, transparent: true, depthWrite: false, roughness: 0.25,
+    polygonOffset: true, polygonOffsetFactor: -4, polygonOffsetUnits: -4,
+  }), MAX_WOUNDS);
   wounds.frustumCulled = false; wounds.count = 0;
   scene.add(drops, splats, wounds);
 }
@@ -77,6 +81,7 @@ export function setBlood(on) {
 export function clearBlood() {
   for (const d of dropItems) d.alive = false;
   drops.count = 0; splats.count = 0; splatCount = 0; splatCursor = 0;
+  for (const w of woundList) w.part.wounds = 0;
   woundList.length = 0; wounds.count = 0;
 }
 
@@ -121,12 +126,40 @@ export function splat(point, normal, size) {
 
 /** Puts a wound on a ragdoll part (local coords) that keeps dripping. */
 export function wound(part, worldPoint, size = 0.02) {
-  if (!enabled) return;
+  if (!enabled || part.wounds >= 5) return;
   const b = part.body;
   const local = b.pointToLocalFrame(new CANNON.Vec3(worldPoint.x, worldPoint.y, worldPoint.z), new CANNON.Vec3());
-  // pull onto the surface a bit
-  if (woundList.length >= MAX_WOUNDS) woundList.shift();
-  woundList.push({ part, local: new THREE.Vector3(local.x, local.y, local.z), size, drip: 0, bleed: 6 + Math.random() * 8 });
+  const d = part.def;
+  // outward surface normal in the part's frame, and the point snapped onto the surface
+  const n = new THREE.Vector3(local.x, local.y, local.z);
+  const p = new THREE.Vector3();
+  if (d.kind === 'limb') {
+    n.y = 0;
+    if (n.lengthSq() < 1e-6) n.set(0, 0, 1);
+    n.normalize();
+    const y = Math.max(-d.len / 2, Math.min(d.len / 2, local.y));
+    p.copy(n).multiplyScalar(d.r * 1.01).setY(y);
+  } else if (d.kind === 'sphere') {
+    if (n.lengthSq() < 1e-6) n.set(0, 0, 1);
+    n.normalize();
+    p.copy(n).multiplyScalar(d.r * 1.01);
+  } else {
+    // box: the face whose axis the point leans out of the most
+    const he = d.he;
+    const ax = Math.abs(local.x) / he[0], ay = Math.abs(local.y) / he[1], az = Math.abs(local.z) / he[2];
+    if (ax >= ay && ax >= az) n.set(Math.sign(local.x) || 1, 0, 0);
+    else if (ay >= az) n.set(0, Math.sign(local.y) || 1, 0);
+    else n.set(0, 0, Math.sign(local.z) || 1);
+    p.set(
+      n.x ? n.x * he[0] * 1.01 : Math.max(-he[0], Math.min(he[0], local.x)),
+      n.y ? n.y * he[1] * 1.01 : Math.max(-he[1], Math.min(he[1], local.y)),
+      n.z ? n.z * he[2] * 1.01 : Math.max(-he[2], Math.min(he[2], local.z)),
+    );
+  }
+  if (woundList.length >= MAX_WOUNDS) woundList.shift().part.wounds--;
+  const q = new THREE.Quaternion().setFromUnitVectors(new THREE.Vector3(0, 0, 1), n);
+  q.premultiply(new THREE.Quaternion().setFromAxisAngle(n, Math.random() * Math.PI * 2));
+  woundList.push({ part, local: p, q, size: size * 2.2, drip: 0, bleed: 6 + Math.random() * 8 });
   part.wounds++;
 }
 
@@ -167,8 +200,8 @@ export function update(dt) {
     _wp.set(wd.local.x, wd.local.y, wd.local.z);
     b.pointToWorldFrame(_wp, _wp);
     _p.set(_wp.x, _wp.y, _wp.z);
-    _q.set(b.quaternion.x, b.quaternion.y, b.quaternion.z, b.quaternion.w);
-    _s.setScalar(wd.size);
+    _q.set(b.quaternion.x, b.quaternion.y, b.quaternion.z, b.quaternion.w).multiply(wd.q);
+    _s.set(wd.size, wd.size, 1);
     _m.compose(_p, _q, _s);
     wounds.setMatrixAt(w++, _m);
     if (wd.bleed > 0) {
@@ -182,6 +215,12 @@ export function update(dt) {
   }
   wounds.count = w;
   wounds.instanceMatrix.needsUpdate = true;
+}
+
+export function clearWoundsOf(rag) {
+  for (let i = woundList.length - 1; i >= 0; i--) {
+    if (woundList[i].part.body.userData.ragdoll === rag) { woundList[i].part.wounds = 0; woundList.splice(i, 1); }
+  }
 }
 
 /** Slowly growing pool under a body that lies still with open wounds. */

@@ -119,6 +119,7 @@ const G = {
   removeFighter(f) {
     const i = fighters.indexOf(f);
     if (i >= 0) fighters.splice(i, 1);
+    blood.clearWoundsOf(f.rag);
     f.rag.dispose();
   },
   respawnPlayer() { respawn(true); },
@@ -565,6 +566,7 @@ function handleEvents(rag) {
         break;
       }
       case 'step': if (isP || Math.random() < 0.3) sfx.knock(e.v * 0.4, 0.35); break;
+      case 'footfall': if (isP) sfx.knock(2.2, 0.32); break;
       case 'jump': if (isP) sfx.whoosh(); break;
       case 'grip': sfx.blip(250); break;
     }
@@ -722,6 +724,7 @@ function respawn(silent = false) {
   releaseGrab();
   const yaw = currentMap.spawn.yaw;
   player.reset(spawnPos(), yaw);
+  blood.clearWoundsOf(player);
   player.out = false;
   cam.yaw = yaw + Math.PI;
   cam.target.copy(spawnPos()).add(new THREE.Vector3(0, 1.5, 0));
@@ -853,7 +856,8 @@ let acc = 0;
 
 function frame() {
   requestAnimationFrame(frame);
-  tick(Math.min(clock.getDelta(), 0.05));
+  const dt = Math.min(clock.getDelta(), 0.05);
+  if (!window.__boneyardHold) tick(dt);
 }
 
 function tick(dt, render = true) {
@@ -963,4 +967,12 @@ window.__boneyard = {
   advance(sec, render = false) { for (let i = 0; i < Math.round(sec * 60); i++) tick(1 / 60, render); },
   keys, pending, get ragdoll() { return player; }, get player() { return player; }, fighters, lv, weapons, blood, camera, THREE, world, L,
   loadMap, MAPS, cam, selectTool, useTool: () => useTool(), mouse, get mode() { return mode; }, setLmb(v) { lmbDown = v; },
+  /** render from another camera angle without stepping anything */
+  view(yaw, pitch = cam.pitch, dist = cam.dist) {
+    const s = { yaw: cam.yaw, pitch: cam.pitch, dist: cam.dist, cd: cam.curDist };
+    Object.assign(cam, { yaw, pitch, dist, curDist: dist });
+    cam.target.copy(player.chest.position).add(new THREE.Vector3(0, -0.3, 0));
+    updateCamera(0); syncAll(); renderer.render(scene, camera);
+    Object.assign(cam, { yaw: s.yaw, pitch: s.pitch, dist: s.dist, curDist: s.cd });
+  },
 };
