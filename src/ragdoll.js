@@ -6,6 +6,7 @@ import {
 } from './physics.js';
 import { headTexture, torsoTexture } from './textures.js';
 import { Skeleton, BONE_COUNT } from './skeleton.js';
+import { makeStainable } from './blood.js';
 
 /*
  * Active ragdoll, v2.
@@ -265,6 +266,7 @@ export class Ragdoll {
         bbr: d.kind === 'limb' ? d.r : d.kind === 'sphere' ? d.r : Math.max(...d.he) * 0.8,
       };
       body.userData = { ragdoll: this, part };
+      makeStainable(mainMat, part);
       track(body, group);
       this.parts.push(part);
       this.partMap[d.name] = part;
@@ -313,6 +315,7 @@ export class Ragdoll {
       b.interpolatedPosition.copy(b.position);
       b.collisionFilterMask = MASK_ALL;
       p.hurt = 0; p.wounds = 0;
+      if (p.stains) { p.stains.length = 0; p.stainU.uBloodN.value = 0; p.bleedT = 0; }
       p.mat.color.copy(p.baseColor);
     }
     for (const j of this.joints) { j.broken = false; j.weak = 1; j.target.identity(); j.prevTarget.identity(); }

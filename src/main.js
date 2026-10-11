@@ -945,7 +945,7 @@ function tick(dt, render = true) {
   for (const f of fighters) f.rag.updateVisuals();
   const fdt = dt * Math.max(0.35, timeScale);
   fx.update(fdt);
-  blood.update(fdt);
+  blood.update(fdt, Ragdoll.all);
   weapons.updateWeaponVisuals(dt);
   updateCamera(dt);
   updateHUD();
