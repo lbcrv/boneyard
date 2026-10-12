@@ -184,8 +184,13 @@ export function initFx(s, c) {
 
 export function clearFx() {
   for (const p of [chunks, smoke, glow, fire, streaks]) p.clear();
-  for (const l of lights) { l.intensity = 0; l.userData.t = 1; }
+  // finish every light's fade outright (a nuke's lasts 3.5 s and would come back on)
+  for (const l of lights) { l.intensity = 0; l.userData = { t: 1, dur: 1, i0: 0 }; }
   ring.visible = false; ringT = -1;
+  shakeAmt = 0;
+  clearTimeout(wfTimer);
+  const wo = document.getElementById('whiteout');
+  if (wo) { wo.style.transition = 'none'; wo.style.opacity = '0'; }
 }
 
 function n(count) { return Math.max(1, Math.round(count * budget)); }
