@@ -500,16 +500,19 @@ L.onScore = (pts, label, pos, rag) => { if (!rag || scores(rag)) addPoints(pts, 
 
 const _bd = new THREE.Vector3();
 function bleed(e) {
-  if (!blood.isBloodOn()) return;
+  if (!blood.isBloodOn() || e.kind === 'bullet') return; // bullets open their own wounds
+  // Blunt trauma bleeds only when it breaks the skin: a long bone snapping
+  // through it, or an impact violent enough to split it open. A knock or a
+  // punch leaves a bruise, not blood.
+  const compound = e.broken.some((b) => b.kind === 'long' || b.kind === 'femur') && e.v > 16;
+  const split = e.v > 18;
+  if (!compound && !split) return;
   const part = e.part;
   const c = part.body.position;
   _bd.set(e.point.x - c.x, e.point.y - c.y, e.point.z - c.z).normalize();
   _bd.y += 0.4;
-  const amount = Math.min(20, Math.round((e.v - 6) * 1.6));
-  blood.spray(e.point, _bd, amount, 1.5 + e.v * 0.15);
-  // blunt trauma only stains; a smashed long bone (compound fracture) opens the skin
-  const compound = e.broken.some((b) => b.kind === 'long' || b.kind === 'femur') && e.v > 16;
-  if (e.v > 11 || e.broken.length) blood.wound(part, e.point, 0.015 + Math.min(0.03, e.v * 0.0015), compound ? 'open' : 'minor');
+  blood.spray(e.point, _bd, Math.min(14, Math.round((e.v - 14) * 1.2)), 1.5 + e.v * 0.12);
+  blood.wound(part, e.point, 0.015 + Math.min(0.03, e.v * 0.0012), 'open');
 }
 
 function noteBones(rag, list) {
