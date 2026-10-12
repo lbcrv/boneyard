@@ -289,7 +289,7 @@ export function wound(part, worldPoint, size = 0.02, severity = 'open', local = 
       st.r = Math.min(0.16, st.r + r * 0.3);
       st.sev = Math.max(st.sev, sev);
       st.bleed = Math.max(st.bleed, bleed);
-      part.bloodWet = Math.max(part.bloodWet || 0, sev ? 1 : 0.7);
+      part.bloodWet = Math.max(part.bloodWet || 0, sev ? 1 : 0.45);
       stained.add(part);
       return;
     }
@@ -297,7 +297,7 @@ export function wound(part, worldPoint, size = 0.02, severity = 'open', local = 
   if (part.stains.length >= MAX_STAINS) part.stains.shift();
   part.stains.push({ local: lp, normal: normal ? normal.clone() : localNormal(part, lp), r, cur: r * 0.3, sev, bleed, beat: Math.random(), jetT: 0 });
   part.wounds = part.stains.length;
-  part.bloodWet = Math.max(part.bloodWet || 0, sev ? 1 : 0.7);
+  part.bloodWet = Math.max(part.bloodWet || 0, sev ? 1 : 0.45);
   stained.add(part);
 }
 
@@ -496,7 +496,7 @@ export function update(dt, ragdolls = []) {
             _wn.set(st.normal.x, st.normal.y, st.normal.z);
             b.vectorToWorldFrame(_wn, _wn);
             const pulse = Math.sin((phase / 0.22) * Math.PI);
-            spray(_p.set(_wp.x, _wp.y, _wp.z), _n.set(_wn.x, _wn.y, _wn.z), 2, (1.6 + 3.2 * pulse) * (0.4 + 0.6 * strength), 0.25);
+            spray(_p.set(_wp.x, _wp.y, _wp.z), _n.set(_wn.x, _wn.y, _wn.z), 1, (1.6 + 3.2 * pulse) * (0.4 + 0.6 * strength), 0.25);
           }
         }
       } else {
@@ -528,7 +528,7 @@ export function update(dt, ragdolls = []) {
         ray.reset();
         if (!world.raycastClosest(rf, rt, RAY, ray)) continue;
         const sp = ray.hitPointWorld, nn = ray.hitNormalWorld;
-        if (fluid.accepts(ray.body, nn)) fluid.deposit(_p.set(sp.x + (Math.random() - 0.5) * 0.04, sp.y, sp.z + (Math.random() - 0.5) * 0.04), 0.9 * flow, null, nn);
+        if (fluid.accepts(ray.body, nn)) fluid.deposit(_p.set(sp.x + (Math.random() - 0.5) * 0.04, sp.y, sp.z + (Math.random() - 0.5) * 0.04), 0.9 * flow * 0.75, null, nn);
       }
     }
   }
@@ -588,11 +588,20 @@ function prints() {
     for (const [mine, other, r, sign] of [[c.bi, c.bj, c.ri, -1], [c.bj, c.bi, c.rj, 1]]) {
       const part = mine.userData && mine.userData.part;
       if (!part || !part.stains || part.def.foot) continue;
-      if (other.userData && other.userData.ragdoll) continue;
-      const wet = part.bloodWet || 0;
-      if (wet < 0.08) continue;
       const now = performance.now();
       if (now - (part.printAt || 0) < 450) continue;
+      const wet = part.bloodWet || 0;
+      const otherPart = other.userData && other.userData.part;
+      if (otherPart) {
+        // limb against limb (his own or someone else's): the blood rubs off
+        if (wet < 0.08 || !otherPart.stains) continue;
+        _cp.set(mine.position.x + r.x, mine.position.y + r.y, mine.position.z + r.z);
+        wound(otherPart, _cp, 0.01, 'minor');
+        otherPart.bloodWet = Math.max(otherPart.bloodWet || 0, wet * 0.4);
+        part.printAt = now;
+        part.bloodWet = wet * 0.55;
+        continue;
+      }
       // surface normal, pointing out of the thing touched toward the part
       _cn.set(c.ni.x * sign, c.ni.y * sign, c.ni.z * sign);
       _cp.set(mine.position.x + r.x, mine.position.y + r.y, mine.position.z + r.z);
@@ -606,14 +615,23 @@ function prints() {
         if (!world.raycastClosest(rf, rt, RAY, ray) || ray.body !== other) continue;
         _cp.set(ray.hitPointWorld.x, ray.hitPointWorld.y, ray.hitPointWorld.z);
         _cn.set(ray.hitNormalWorld.x, ray.hitNormalWorld.y, ray.hitNormalWorld.z);
+        // touching fresh blood: it smears onto the part instead
+        if (fluid.sample(_cp, _cn, 0.05) > 0.07) {
+          wound(part, _p.set(mine.position.x + r.x, mine.position.y + r.y, mine.position.z + r.z), 0.01, 'minor');
+          part.bloodWet = 1;
+          part.printAt = now;
+          continue;
+        }
+        if (wet < 0.08) continue;
         _cd.set(0, -1, 0).applyQuaternion(_q.set(mine.quaternion.x, mine.quaternion.y, mine.quaternion.z, mine.quaternion.w));
         if (hand) fluid.stamp(_cp, _cn, _cd, 0.1, 0.055, 0.3 * wet, HAND);
         else fluid.stamp(_cp, _cn, mine.velocity.lengthSquared() > 0.25 ? mine.velocity : _cd, part.bbr * 0.7, part.bbr * 0.5, 0.22 * wet);
       } else {
+        if (wet < 0.08) continue;
         splat(_cp, _cn, hand ? 0.12 : 0.1, 'drops', other);
       }
       part.printAt = now;
-      part.bloodWet = wet * 0.7;
+      part.bloodWet = wet * 0.55;
     }
   }
 }

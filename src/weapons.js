@@ -57,8 +57,8 @@ export function fireSMG(origin, dir, muzzle) {
     rag.receiveHit({ part, v: 15, point: h.point, focus: 2, kind: 'bullet', dmgMul: 1.4 });
     rag.stumble = Math.min(1, rag.stumble + 0.25);
     if (blood.isBloodOn()) {
-      blood.spray(h.point, _v.copy(d).negate(), 5, 2.2);
-      blood.spray(h.point, d, 9, 4.5);
+      blood.spray(h.point, _v.copy(d).negate(), 2, 1.8);
+      blood.spray(h.point, d, 6, 4.2);
       // head, neck and the femoral artery bleed out; everywhere else is a hole that drips
       const local = b.pointToLocalFrame(new CANNON.Vec3(h.point.x, h.point.y, h.point.z), new CANNON.Vec3());
       const neck = part.name === 'chest' && local.y > 0.08;

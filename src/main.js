@@ -141,7 +141,41 @@ const _camPos = new THREE.Vector3();
 const camRay = new CANNON.RaycastResult();
 const camFrom = new CANNON.Vec3(), camTo = new CANNON.Vec3();
 
+/*
+ * Free camera (P): fly anywhere with WASD, Space up, C down, Shift fast;
+ * right-drag looks around. The dummy stands still meanwhile; tools still aim
+ * from the camera.
+ */
+let freeCam = null;
+function toggleFreeCam() {
+  if (freeCam) { freeCam = null; return; }
+  freeCam = { pos: camera.position.clone() };
+}
+
+function updateFreeCam(dt) {
+  const dir = new THREE.Vector3(
+    Math.sin(cam.yaw) * Math.cos(cam.pitch), Math.sin(cam.pitch), Math.cos(cam.yaw) * Math.cos(cam.pitch),
+  );
+  const fwd = dir.clone().negate();
+  const right = new THREE.Vector3().crossVectors(fwd, new THREE.Vector3(0, 1, 0)).normalize();
+  const v = new THREE.Vector3();
+  if (keys.has('KeyW') || keys.has('ArrowUp')) v.add(fwd);
+  if (keys.has('KeyS') || keys.has('ArrowDown')) v.sub(fwd);
+  if (keys.has('KeyD') || keys.has('ArrowRight')) v.add(right);
+  if (keys.has('KeyA') || keys.has('ArrowLeft')) v.sub(right);
+  if (keys.has('Space')) v.y += 1;
+  if (keys.has('KeyC')) v.y -= 1;
+  const speed = keys.has('ShiftLeft') || keys.has('ShiftRight') ? 26 : 8;
+  if (v.lengthSq() > 0) freeCam.pos.addScaledVector(v.normalize(), speed * dt);
+  camera.position.copy(freeCam.pos);
+  camera.lookAt(_camPos.copy(freeCam.pos).add(fwd));
+  sun.position.copy(freeCam.pos).add(sunOffset);
+  sun.target.position.copy(freeCam.pos);
+  sky.position.copy(camera.position);
+}
+
 function updateCamera(dt) {
+  if (freeCam) { updateFreeCam(dt); return; }
   const c = player.chest.position;
   const desired = new THREE.Vector3(c.x, c.y + 0.25, c.z);
   cam.target.lerp(desired, 1 - Math.exp(-dt * 8));
@@ -196,6 +230,7 @@ window.addEventListener('keydown', (e) => {
     }
     case 'KeyR': loadMap(currentMap); break; // a clean slate: props, wreckage, blood, vehicles
     case 'Backspace': loadMap(currentMap); break;
+    case 'KeyP': toggleFreeCam(); sfx.blip(freeCam ? 600 : 420); break;
     case 'KeyT': slowmo = !slowmo; sfx.blip(slowmo ? 440 : 660); break;
     case 'KeyB': blood.setBlood(!blood.isBloodOn()); syncSettings(); sfx.blip(blood.isBloodOn() ? 500 : 400); break;
     case 'KeyG':
@@ -230,7 +265,7 @@ canvas.addEventListener('pointermove', (e) => {
   setMouse(e);
   if (rmbDown) {
     cam.yaw -= (e.clientX - lastMouse.x) * 0.006;
-    cam.pitch = Math.max(-0.35, Math.min(1.35, cam.pitch + (e.clientY - lastMouse.y) * 0.005));
+    cam.pitch = Math.max(freeCam ? -1.5 : -0.35, Math.min(freeCam ? 1.5 : 1.35, cam.pitch + (e.clientY - lastMouse.y) * 0.005));
     lastMouse = { x: e.clientX, y: e.clientY };
   }
 });
@@ -272,6 +307,11 @@ function readInput() {
     camYaw: Math.atan2(f.x, f.z),
   };
   if (mode) mode.input(inp, keys);
+  if (freeCam) {
+    inp.moveX = inp.moveZ = 0;
+    inp.jump = inp.dive = inp.crouch = inp.sweep = inp.run = false;
+    inp.throttle = 0; inp.steer = 0; inp.handbrake = false;
+  }
   return inp;
 }
 
@@ -366,24 +406,14 @@ function useTool() {
       sfx.blip(360);
       break;
     case 'truck': {
-      if (!h) return;
-      // aim at the ground under the target: a ragdoll's feet, or the floor below a wall hit
-      let T = h.point.clone();
-      const rag = h.body && h.body.userData && h.body.userData.ragdoll;
-      if (rag) { const c = rag.comPosition(new THREE.Vector3()); T.set(c.x, c.y, c.z); }
-      const gT = groundBelow(T.x, T.y + 1, T.z);
-      if (gT !== null) T.y = gT;
-      const f = new THREE.Vector3(dir.x, 0, dir.z).normalize();
-      if (rag) {
-        // lead a moving target
-        const v = rag.comVelocity(new THREE.Vector3());
-        T.addScaledVector(v.setY(0), 14 / 26);
-      }
-      const p = T.clone().addScaledVector(f, -14);
-      const gP = groundBelow(p.x, Math.max(p.y, T.y) + 6, p.z);
-      p.y = (gP !== null ? gP : T.y) + 1.05;
-      trackSpawn(lv.truck(p, f, 26, true));
+      // fired like the cannon: out of the camera, along the aim, nose first
+      const p = camera.position.clone().addScaledVector(dir, 5);
+      const gp = groundBelow(p.x, p.y + 1, p.z);
+      if (gp !== null && p.y < gp + 1.5) p.y = gp + 1.5;
+      trackSpawn(lv.truck(p, dir, 32));
+      sfx.shot();
       sfx.whoosh();
+      fx.shake(0.45);
       break;
     }
   }
@@ -554,7 +584,7 @@ function handleEvents(rag) {
           const nrm = lp.lengthSq() > 1e-6 ? lp.clone().normalize() : new THREE.Vector3(0, 1, 0);
           blood.wound(part, null, 0.05, 'severe', lp, nrm);
         }
-        blood.spray(e.point, new THREE.Vector3(0, 1, 0), 30, 4.5, 1.2);
+        blood.spray(e.point, new THREE.Vector3(0, 1, 0), 16, 4, 1.1);
         sfx.crack(); sfx.thud(22, true); sfx.grunt(1.4);
         if (isP || scores(rag)) {
           fx.banner('AMPUTACIÓN', partLabel(j.C));
@@ -579,6 +609,9 @@ function handleEvents(rag) {
         else fx.popup(e.point, 'MUERTO', 'head', 34);
         if (scores(rag)) addPoints(1000, 'LETAL', e.point, 'big');
         if (isP) for (const f of fighters) if (f.rag.state === 'stand' && Math.random() < 0.7) f.rag.setEmote(Math.random() < 0.5 ? 'disco' : 'robot');
+        break;
+      case 'landfeet':
+        fx.popup(e.point, 'CAE DE PIE', '', 22);
         break;
       case 'reversal':
         sfx.whoosh(); sfx.grunt(1.2);
@@ -729,6 +762,7 @@ function placeMapMines(map) {
 
 function loadMap(map) {
   releaseGrab();
+  freeCam = null;
   if (mode) { mode.dispose(); mode = null; }
   for (const f of fighters.slice()) G.removeFighter(f);
   spawned.length = 0;

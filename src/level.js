@@ -6,6 +6,7 @@ import * as fx from './fx.js';
 import * as sfx from './audio.js';
 import * as blood from './blood.js';
 import { Ragdoll } from './ragdoll.js';
+import { makeTruck } from './carmodels.js';
 
 /*
  * Everything that belongs to the current map lives here so a map switch / reset
@@ -200,41 +201,27 @@ export function barrel(pos) {
   return b;
 }
 
-export function truck(pos, dir, speed = 22, flatOut = false) {
+/*
+ * A box truck fired like a cannonball: dir is the aim (it may point up or
+ * down), the truck flies nose first along it at `speed` and tumbles on
+ * whatever it meets. Body origin sits 1.3 m above the wheels' contact patch.
+ */
+export function truck(pos, dir, speed = 30) {
   const g = new THREE.Group();
+  const model = makeTruck(0xd8402a, 6);
+  model.position.y = -1.3;
+  g.add(model);
   const yaw = Math.atan2(dir.x, dir.z);
-  const red = stdMat(0xd8402a, { roughness: 0.4, metalness: 0.3 });
-  const gray = stdMat(0xd9d9d9, { roughness: 0.6 });
-  const black = stdMat(0x1c1c1c, { roughness: 0.9 });
-  const glass = stdMat(0x7fc6ff, { roughness: 0.1, metalness: 0.6 });
-  const cargo = new THREE.Mesh(new THREE.BoxGeometry(2.2, 1.9, 3.2), gray); cargo.position.set(0, 0.25, -0.75);
-  const cab = new THREE.Mesh(new THREE.BoxGeometry(2.2, 1.4, 1.3), red); cab.position.set(0, 0.0, 1.55);
-  const win = new THREE.Mesh(new THREE.BoxGeometry(2.0, 0.55, 0.05), glass); win.position.set(0, 0.35, 2.21);
-  const bumper = new THREE.Mesh(new THREE.BoxGeometry(2.3, 0.3, 0.2), black); bumper.position.set(0, -0.6, 2.25);
-  g.add(cargo, cab, win, bumper);
-  for (const [x, z] of [[1.05, 1.5], [-1.05, 1.5], [1.05, -1.4], [-1.05, -1.4]]) {
-    const w = new THREE.Mesh(new THREE.CylinderGeometry(0.45, 0.45, 0.3, 16), black);
-    w.rotation.z = Math.PI / 2; w.position.set(x, -0.75, z); g.add(w);
-  }
+  const pitch = -Math.asin(Math.max(-0.6, Math.min(0.6, dir.y)));
   const b = dynamicBody([
-    boxShape(2.2, 1.9, 3.2, [0, 0.25, -0.75]),
-    boxShape(2.2, 1.4, 1.3, [0, 0.0, 1.55]),
-    boxShape(2.2, 0.5, 4.6, [0, -0.7, 0.1]),
-  ], [pos.x, pos.y, pos.z], 1600, g, { rot: [0, yaw, 0], material: MAT.vehicle, sleep: false });
-  b.velocity.set(dir.x * speed, 0, dir.z * speed);
+    boxShape(2.35, 2.6, 4.0, [0, 0.85, -1.0]),
+    boxShape(2.3, 2.1, 2.0, [0, 0.2, 2.0]),
+    boxShape(2.2, 0.7, 6.0, [0, -0.75, 0]),
+  ], [pos.x, pos.y, pos.z], 4500, g, { rot: [pitch, yaw, 0], material: MAT.vehicle, sleep: false, angularDamping: 0.1 });
+  b.velocity.set(dir.x * speed, dir.y * speed, dir.z * speed);
   b.userData.kind = 'truck';
   b.userData.noGrip = false;
   impactSound(b, 0.5);
-  let t = 0;
-  L.updaters.push((dt) => {
-    t += dt;
-    if (t < 2.5 && b.world) {
-      // keep the engine pushing for a bit
-      const v = b.velocity;
-      const along = v.x * dir.x + v.z * dir.z;
-      if (along < speed) { b.force.x += dir.x * 1600 * 14; b.force.z += dir.z * 1600 * 14; }
-    }
-  });
   L.props.push(b);
   return b;
 }

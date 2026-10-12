@@ -77,6 +77,9 @@ function jointDefs() {
   return defs;
 }
 
+// chance to land on your feet after a throw or a knockdown blow
+const LAND_ON_FEET = 0.15;
+
 // scratch
 const _gA = new CANNON.Vec3(), _gB = new CANNON.Vec3();
 const qp = new THREE.Quaternion();
@@ -744,8 +747,18 @@ export class Ragdoll {
     enemy.act = null;
     enemy.queued = null;
     enemy.actCd = 0.8;
-    enemy.goFall('reversal');
     enemy.lastHitBy = this;
+    enemy.hp -= 12;
+    if (Math.random() < LAND_ON_FEET) {
+      // thrown, but he gets his feet under him: a short hop back, a stagger
+      for (const p of enemy.parts) p.body.velocity.set(fx * 4, 4.2, fz * 4);
+      enemy.stumble = 0.75;
+      enemy.airGrace = 1.2;
+      enemy.events.push({ type: 'landfeet', rag: enemy, point: new THREE.Vector3().copy(enemy.head.position) });
+      this.events.push({ type: 'reversal', rag: this, victim: enemy, point: new THREE.Vector3().copy(enemy.chest.position) });
+      return;
+    }
+    enemy.goFall('reversal');
     // lift and throw over the shoulder, with a flip
     for (const p of enemy.parts) {
       const up = p.name === 'head' || p.name === 'chest' ? 7.5 : 5.5;
@@ -753,7 +766,6 @@ export class Ragdoll {
     }
     enemy.chest.angularVelocity.set(fz * 9, 0, -fx * 9);
     enemy.pelvis.angularVelocity.set(fz * 7, 0, -fx * 7);
-    enemy.hp -= 12;
     this.events.push({ type: 'reversal', rag: this, victim: enemy, point: new THREE.Vector3().copy(enemy.chest.position) });
   }
 
@@ -866,7 +878,11 @@ export class Ragdoll {
     this.actCd = 0.18;
     this.stumble = Math.min(1, this.stumble + (c.heavy ? 0.45 : 0.22));
     const down = (c.heavy && (part.name === 'head' || this.hp < 45)) || this.hp < 20 || (this.blocking && c.heavy && Math.random() < 0.3);
-    if (down) this.goFall(h.kind);
+    if (down && this.hp >= 20 && Math.random() < LAND_ON_FEET) {
+      // rocked, but he keeps his feet
+      this.stumble = 0.8;
+      this.events.push({ type: 'landfeet', rag: this, point: new THREE.Vector3().copy(this.head.position) });
+    } else if (down) this.goFall(h.kind);
     return 1;
   }
 
@@ -927,7 +943,8 @@ export class Ragdoll {
       this.stumble = Math.max(0, this.stumble - dt * 1.2);
       if (chestUp < 0.5 || pelvisUp < 0.45) this.tiltT += dt; else this.tiltT = 0;
       if (this.tiltT > 0.12) this.goFall('tilt');
-      if (this.airT > 1.0 || (!this.grounded && vel.y < -9)) this.goFall('air');
+      if (this.airT > 1.0 + (this.airGrace || 0) || (!this.grounded && vel.y < -9)) this.goFall('air');
+      if (this.grounded) this.airGrace = 0;
       if (this.cannotStand()) this.goFall('legs');
       // pinned at the edge of balance for too long: down he goes
       this.wobbleT = this.stumble > 0.9 ? (this.wobbleT || 0) + dt : 0;
