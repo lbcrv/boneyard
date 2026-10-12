@@ -194,7 +194,7 @@ window.addEventListener('keydown', (e) => {
       if (emoteIdx === EMOTES.length) { player.emote = null; emoteIdx = -1; } else player.setEmote(EMOTES[emoteIdx][0]);
       break;
     }
-    case 'KeyR': respawn(); break;
+    case 'KeyR': loadMap(currentMap); break; // a clean slate: props, wreckage, blood, vehicles
     case 'Backspace': loadMap(currentMap); break;
     case 'KeyT': slowmo = !slowmo; sfx.blip(slowmo ? 440 : 660); break;
     case 'KeyB': blood.setBlood(!blood.isBloodOn()); syncSettings(); sfx.blip(blood.isBloodOn() ? 500 : 400); break;

@@ -21,8 +21,15 @@ const _c = new THREE.Color();
 const UP = new THREE.Vector3(0, 1, 0);
 
 class Pool {
-  constructor(geo, mat, max) {
+  constructor(geo, mat, max, { billboard = false } = {}) {
     this.max = max;
+    this.billboard = billboard;
+    if (billboard) {
+      // camera-facing quads with their own opacity per particle
+      this.alpha = new THREE.InstancedBufferAttribute(new Float32Array(max), 1);
+      this.alpha.setUsage(THREE.DynamicDrawUsage);
+      geo.setAttribute('aAlpha', this.alpha);
+    }
     this.mesh = new THREE.InstancedMesh(geo, mat, max);
     this.mesh.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
     this.mesh.instanceColor = new THREE.InstancedBufferAttribute(new Float32Array(max * 3), 3);
@@ -43,6 +50,8 @@ class Pool {
     this.cursor = (this.cursor + 1) % this.max;
     if (!it.alive) this.live++;
     it.alive = true;
+    it.alpha = 0.6;
+    it.rot.z = Math.random() * 6.28;
     return it;
   }
 
@@ -58,12 +67,19 @@ class Pool {
       if (it.drag) it.vel.multiplyScalar(Math.max(0, 1 - it.drag * dt));
       it.pos.addScaledVector(it.vel, dt);
       if (it.floor !== undefined && it.pos.y < it.floor) { it.pos.y = it.floor; it.vel.y *= -0.3; it.vel.x *= 0.6; it.vel.z *= 0.6; }
-      it.rot.x += it.spin * dt; it.rot.y += it.spin * 0.7 * dt;
+      it.rot.x += it.spin * dt; it.rot.y += it.spin * 0.7 * dt; it.rot.z += it.spin * 0.4 * dt;
       const k = it.life / it.maxLife;
       let sc = it.size;
       if (it.grow) sc *= 1 + (1 - k) * it.grow;
       else if (k < 0.3) sc *= k / 0.3;
-      if (it.stretch) {
+      if (this.billboard) {
+        // facing the camera, turning slowly about the view axis
+        _q.copy(camera.quaternion).multiply(_q2.setFromAxisAngle(Z, it.rot.z));
+        _s.set(sc, sc, 1);
+        const fadeIn = Math.min(1, (1 - k) / 0.08);
+        const fadeOut = Math.pow(Math.min(1, k / 0.75), 1.6);
+        this.alpha.array[n] = (it.alpha ?? 0.6) * fadeIn * fadeOut;
+      } else if (it.stretch) {
         // velocity-aligned streak
         _v.copy(it.vel).normalize();
         _q.setFromUnitVectors(UP, _v);
@@ -82,7 +98,55 @@ class Pool {
     this.mesh.count = n;
     this.mesh.instanceMatrix.needsUpdate = true;
     this.mesh.instanceColor.needsUpdate = true;
+    if (this.alpha) this.alpha.needsUpdate = true;
   }
+}
+
+const Z = new THREE.Vector3(0, 0, 1);
+const _q2 = new THREE.Quaternion();
+
+/** A soft puff of smoke: overlapping blobs, ragged but round, fading to nothing at the rim. */
+function smokeTexture() {
+  const size = 128, c = document.createElement('canvas');
+  c.width = c.height = size;
+  const g = c.getContext('2d');
+  for (let i = 0; i < 22; i++) {
+    const a = Math.random() * Math.PI * 2, d = Math.random() * size * 0.18;
+    const x = size / 2 + Math.cos(a) * d, y = size / 2 + Math.sin(a) * d;
+    const r = size * (0.1 + Math.random() * 0.16);
+    const gr = g.createRadialGradient(x, y, 0, x, y, r);
+    const v = 200 + Math.random() * 55;
+    gr.addColorStop(0, `rgba(${v},${v},${v},0.55)`);
+    gr.addColorStop(1, `rgba(${v},${v},${v},0)`);
+    g.fillStyle = gr;
+    g.fillRect(0, 0, size, size);
+  }
+  // fine grain so it is not a smooth blob
+  const img = g.getImageData(0, 0, size, size);
+  for (let i = 0; i < img.data.length; i += 4) img.data[i + 3] *= 0.8 + Math.random() * 0.4;
+  g.putImageData(img, 0, 0);
+  g.globalCompositeOperation = 'destination-in';
+  const edge = g.createRadialGradient(size / 2, size / 2, size * 0.04, size / 2, size / 2, size / 2);
+  edge.addColorStop(0, 'rgba(0,0,0,1)');
+  edge.addColorStop(1, 'rgba(0,0,0,0)');
+  g.fillStyle = edge;
+  g.fillRect(0, 0, size, size);
+  const t = new THREE.CanvasTexture(c);
+  t.colorSpace = THREE.SRGBColorSpace;
+  return t;
+}
+
+function smokeMaterial() {
+  const m = new THREE.MeshBasicMaterial({ map: smokeTexture(), transparent: true, depthWrite: false });
+  m.onBeforeCompile = (sh) => {
+    sh.vertexShader = sh.vertexShader
+      .replace('#include <common>', '#include <common>\nattribute float aAlpha;\nvarying float vAlpha;')
+      .replace('#include <begin_vertex>', '#include <begin_vertex>\nvAlpha = aAlpha;');
+    sh.fragmentShader = sh.fragmentShader
+      .replace('#include <common>', '#include <common>\nvarying float vAlpha;')
+      .replace('#include <map_fragment>', '#include <map_fragment>\ndiffuseColor.a *= vAlpha;');
+  };
+  return m;
 }
 
 let chunks, smoke, glow, fire, streaks;
@@ -97,10 +161,14 @@ export function initFx(s, c) {
   const ball = new THREE.IcosahedronGeometry(1, 1);
   chunks = new Pool(box, new THREE.MeshStandardMaterial({ roughness: 0.85 }), 700);
   chunks.mesh.castShadow = true;
-  smoke = new Pool(ball, new THREE.MeshStandardMaterial({ roughness: 1, transparent: true, opacity: 0.55, depthWrite: false }), 700);
+  smoke = new Pool(new THREE.PlaneGeometry(1, 1), smokeMaterial(), 900, { billboard: true });
+  // drawn after the blood on the ground and walls (which is also transparent),
+  // so blood is seen through the smoke, never painted over it
+  smoke.mesh.renderOrder = 5;
   glow = new Pool(ball, new THREE.MeshBasicMaterial({ blending: THREE.AdditiveBlending, transparent: true, depthWrite: false, toneMapped: false }), 900);
   fire = new Pool(ball, new THREE.MeshBasicMaterial({ blending: THREE.AdditiveBlending, transparent: true, depthWrite: false, toneMapped: false }), 80);
   streaks = new Pool(new THREE.CylinderGeometry(0.5, 0.5, 1, 5, 1, true), new THREE.MeshBasicMaterial({ blending: THREE.AdditiveBlending, transparent: true, depthWrite: false, toneMapped: false }), 200);
+  for (const p of [glow, fire, streaks]) p.mesh.renderOrder = 6;
   for (const p of [chunks, smoke, glow, fire, streaks]) scene.add(p.mesh);
   for (let i = 0; i < 4; i++) {
     const l = new THREE.PointLight(0xffa040, 0, 40, 1.6);
@@ -140,13 +208,18 @@ export function debris(pos, color = 0xcccccc, count = 8, speed = 4, size = 0.06)
 }
 
 export function dust(pos, scale = 1) {
-  for (let i = 0, k = n(4 + scale * 6); i < k; i++) {
+  for (let i = 0, k = n(5 + scale * 8); i < k; i++) {
     const it = smoke.spawn();
-    it.vel.set(rnd(), Math.random() * 0.4, rnd()).normalize().multiplyScalar(1.2 * scale * (0.5 + Math.random()));
-    it.pos.copy(pos).addScaledVector(it.vel, 0.1);
-    it.size = 0.12 * scale; it.grow = 1.8; it.drag = 2.5; it.grav = -0.6; it.fade = 0; it.stretch = 0; it.spin = 0;
-    it.life = it.maxLife = 0.7 + Math.random() * 0.4;
-    it.color.set(0xd2ccbe);
+    const a = Math.random() * Math.PI * 2;
+    const sp = 1.4 * scale * (0.5 + Math.random());
+    it.vel.set(Math.cos(a) * sp, Math.random() * 0.5 * scale, Math.sin(a) * sp);
+    it.pos.copy(pos).addScaledVector(it.vel, 0.06);
+    it.size = (0.22 + Math.random() * 0.18) * scale; it.grow = 2.2; it.drag = 2.8; it.grav = -0.25; it.fade = 0; it.stretch = 0;
+    it.spin = (Math.random() - 0.5) * 1.5; it.rot.z = Math.random() * 6.28;
+    it.life = it.maxLife = 0.9 + Math.random() * 0.7;
+    it.alpha = 0.42;
+    const v = 0.78 + Math.random() * 0.1;
+    it.color.setRGB(v, v * 0.96, v * 0.9);
     it.floor = undefined;
   }
 }
@@ -197,13 +270,29 @@ export function explosion(pos, radius = 5) {
     it.color.set(Math.random() < 0.5 ? 0xff7a1a : 0xffc640);
     it.floor = undefined;
   }
+  for (let i = 0, k = n(20); i < k; i++) {
+    const it = smoke.spawn();
+    it.pos.copy(pos).add(_p.set(rnd(r * 0.15), Math.random() * r * 0.15, rnd(r * 0.15)));
+    it.vel.set(rnd(), Math.random() * 0.7 + 0.4, rnd()).normalize().multiplyScalar(1.5 + Math.random() * 3.5);
+    it.size = r * (0.16 + Math.random() * 0.14); it.grow = 3; it.drag = 1.5; it.grav = -1.4; it.fade = 0; it.stretch = 0;
+    it.spin = (Math.random() - 0.5) * 0.8; it.rot.z = Math.random() * 6.28;
+    it.life = it.maxLife = 2.6 + Math.random() * 1.8;
+    it.alpha = 0.62;
+    const v = 0.12 + Math.random() * 0.1;
+    it.color.setRGB(v, v * 0.95, v * 0.9);
+    it.floor = undefined;
+  }
   for (let i = 0, k = n(14); i < k; i++) {
     const it = smoke.spawn();
-    it.pos.copy(pos);
-    it.vel.set(rnd(), Math.random() * 0.6 + 0.3, rnd()).normalize().multiplyScalar(1.5 + Math.random() * 3);
-    it.size = 0.35 + Math.random() * 0.3; it.grow = 2.4; it.drag = 1.8; it.grav = -1.2; it.fade = 0; it.stretch = 0; it.spin = 0;
-    it.life = it.maxLife = 1.3 + Math.random() * 0.9;
-    it.color.setRGB(0.22, 0.2, 0.19);
+    const a = Math.random() * Math.PI * 2;
+    it.vel.set(Math.cos(a), 0.08, Math.sin(a)).multiplyScalar(4 + Math.random() * 5);
+    it.pos.copy(pos).add(_p.set(0, 0.2, 0));
+    it.size = r * (0.1 + Math.random() * 0.06); it.grow = 2.4; it.drag = 2.4; it.grav = -0.4; it.fade = 0; it.stretch = 0;
+    it.spin = (Math.random() - 0.5); it.rot.z = Math.random() * 6.28;
+    it.life = it.maxLife = 2.0 + Math.random() * 1.4;
+    it.alpha = 0.45;
+    const v = 0.55 + Math.random() * 0.12;
+    it.color.setRGB(v, v * 0.95, v * 0.88);
     it.floor = undefined;
   }
   debris(pos, 0x3a3532, 8, 7, 0.07);

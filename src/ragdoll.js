@@ -327,7 +327,7 @@ export class Ragdoll {
       groundY: pos.y, groundRate: 0, trip: 0, hitCd: 0, grabHeld: false, crouching: false,
       act: null, actCd: 0, punchSide: 1, hp: 100, paralysed: false, burnt: 0, seat: null,
       lastSwing: 'R', swingSide: null, sinceStep: 0, groundRef: pos.y, maskRestoreT: 0,
-      lastHitBy: null, dead: false, crawling: false, crawlT: 0, comboTaken: 0, emote: null, emoteT: 0, queued: null, chainKind: null, chainIdx: 0, lastMoveEnd: -9, react: null, blocking: false, combatTarget: null, lastBlocked: false,
+      lastHitBy: null, dead: false, bloodLeft: 1, crawling: false, crawlT: 0, comboTaken: 0, emote: null, emoteT: 0, queued: null, chainKind: null, chainIdx: 0, lastMoveEnd: -9, react: null, blocking: false, combatTarget: null, lastBlocked: false,
     });
     this.events.length = 0;
     this.pendingHits.length = 0;
@@ -877,6 +877,9 @@ export class Ragdoll {
     if (this.hitCd > 0) this.hitCd -= dt;
     if (this.jumpCd > 0) this.jumpCd -= dt;
     if (this.koT > 0) this.koT -= dt;
+    // lost too much blood: faint, then die
+    if (!this.dead && this.bloodLeft < 0.45 && this.state === 'stand') this.goFall('blood');
+    if (!this.dead && this.bloodLeft < 0.3) this.kill(new THREE.Vector3().copy(this.chest.position));
     if (this.diveT > 0) this.diveT -= dt;
     if (this.actCd > 0) this.actCd -= dt;
     if (this.maskRestoreT > 0) {
@@ -1076,6 +1079,10 @@ export class Ragdoll {
     }
 
     // ---- feet & pose
+    // walked off an edge: the ground under the hips is well below the feet.
+    // Let go of the ledge (a planted foot would hold him up in mid-air) and drop.
+    this.offEdge = this.state === 'stand' && (!this.grounded || this.groundY < this.groundRef - 0.35);
+    if (this.offEdge) this.unplantAll();
     if (this.state === 'stand') this.updateGait(dt, vel, hSpeed);
     else if (this.plants.L || this.plants.R) this.unplantAll();
     this.computePose(dt, hSpeed, vel);
@@ -1101,7 +1108,7 @@ export class Ragdoll {
         let targetH = STAND_H;
         let ref = this.groundY;
         if (this.state === 'stand') {
-          ref = this.groundRef;
+          ref = this.offEdge ? this.groundY : this.groundRef;
           if (this.crouching) targetH = 0.62;
           else if (this.act) targetH -= 0.05 - clipDrop(this.act.clip, this.act.t);
           else if (this.combatTarget) targetH -= 0.05 + 0.012 * Math.sin(this.time * 7);
@@ -1184,6 +1191,11 @@ export class Ragdoll {
       for (const S of ['L', 'R']) {
         const f = this.feet[S].plant;
         err[S] = Math.hypot(f.x - ideal[S][0], f.z - ideal[S][1]);
+        // a foot that is not where the gait thinks it is (left up on a ledge,
+        // knocked away) gets a fresh step
+        const fb = this.partMap['foot' + S].body.position;
+        const lost = Math.hypot(fb.x - f.x, fb.y - f.y, fb.z - f.z);
+        if (lost > 0.25) err[S] = Math.max(err[S], 1 + lost);
       }
       let pick = err.L > err.R ? 'L' : 'R';
       if (moving && pick === this.lastSwing) pick = pick === 'L' ? 'R' : 'L';
@@ -1263,7 +1275,7 @@ export class Ragdoll {
           }
         }
         // pin the foot once it is actually on something (walking and standing)
-        if (!run && S !== kickLeg && !this.plants[S] && f.plantBody && foot.position.y - f.g < 0.09) this.plantFoot(S, f.plantBody);
+        if (!run && !this.offEdge && S !== kickLeg && !this.plants[S] && f.plantBody && foot.position.y - f.g < 0.09) this.plantFoot(S, f.plantBody);
         // a pinned foot follows what it stands on (crates, platforms)
         const pl = this.plants[S];
         if (pl && pl.body.type !== CANNON.Body.STATIC) {
@@ -1355,8 +1367,10 @@ export class Ragdoll {
     const breathe = Math.sin(t * 2.2) * 0.03;
 
     if (st === 'seated') {
-      this.sym('hip', -1.5, 0, 0.08);
-      this.sym('knee', 1.45);
+      // legs folded under a dashboard, or stuck out straight (a trolley basket)
+      const sp = this.seat && this.seat.def.legs;
+      this.sym('hip', sp ? sp[0] : -1.5, 0, 0.08);
+      this.sym('knee', sp ? sp[1] : 1.45);
       this.sym('ankle', -0.1);
       this.sym('shoulder', -1.1, 0, 0.05);
       this.sym('elbow', -0.5);

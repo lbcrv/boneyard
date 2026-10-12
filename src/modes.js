@@ -171,8 +171,10 @@ function dojo(cfg, G) {
 }
 
 // ------------------------------------------------------------------ crash (Turbo Dismount-style)
+// the vehicle picked survives a reset (R reloads the whole map)
+let crashTypeIdx = 0;
 function crash(map, cfg, G) {
-  let typeIdx = 0;
+  let typeIdx = crashTypeIdx;
   let vehicle = null;
 
   function spawn() {
@@ -183,7 +185,7 @@ function crash(map, cfg, G) {
     G.vehicle = vehicle;
   }
   spawn();
-  setTimeout(() => fx.banner(VEHICLE_TYPES[VEHICLE_ORDER[typeIdx]].name, 'ESPACIO ARRANCA · V CAMBIA DE VEHÍCULO'), 300);
+  setTimeout(() => fx.banner(VEHICLE_TYPES[VEHICLE_ORDER[typeIdx]].name, 'W ACELERA · S FRENA · ESPACIO FRENO DE MANO · V CAMBIA DE VEHÍCULO'), 300);
 
   return {
     kind: 'crash',
@@ -199,19 +201,20 @@ function crash(map, cfg, G) {
       if (!vehicle) return '';
       const v = vehicle.chassis.velocity;
       const kmh = Math.round(Math.hypot(v.x, v.z) * 3.6);
-      return `${vehicle.def.name} · ${kmh} km/h${vehicle.ejected ? ' · EYECTADO' : vehicle.launched ? '' : ' · ESPACIO PARA ARRANCAR'}`;
+      return `${vehicle.def.name} · ${kmh} km/h${vehicle.ejected ? ' · EYECTADO' : vehicle.launched ? '' : ' · W PARA ARRANCAR'}`;
     },
     input(inp, keys) {
       const seated = vehicle && !vehicle.ejected;
       inp.steer = (keys.has('KeyA') || keys.has('ArrowLeft') ? 1 : 0) - (keys.has('KeyD') || keys.has('ArrowRight') ? 1 : 0);
-      inp.launch = inp.jump && seated;
+      inp.throttle = (keys.has('KeyW') || keys.has('ArrowUp') ? 1 : 0) - (keys.has('KeyS') || keys.has('ArrowDown') ? 1 : 0);
+      inp.handbrake = keys.has('Space');
       if (seated) { inp.moveX = 0; inp.moveZ = 0; inp.jump = false; }
     },
     cycleVehicle() {
       if (vehicle && vehicle.launched && !vehicle.ejected) return;
-      typeIdx = (typeIdx + 1) % VEHICLE_ORDER.length;
+      typeIdx = crashTypeIdx = (typeIdx + 1) % VEHICLE_ORDER.length;
       spawn();
-      fx.banner(VEHICLE_TYPES[VEHICLE_ORDER[typeIdx]].name, 'ESPACIO ARRANCA');
+      fx.banner(VEHICLE_TYPES[VEHICLE_ORDER[typeIdx]].name, 'W ACELERA · S FRENA');
     },
     onRespawn() { spawn(); },
     dispose() { if (vehicle) vehicle.dispose(); vehicle = null; G.vehicle = null; },

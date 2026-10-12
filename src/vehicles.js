@@ -5,70 +5,97 @@ import * as lv from './level.js';
 import { L } from './level.js';
 import * as fx from './fx.js';
 import * as sfx from './audio.js';
+import { makeConvertible, makeTrolley, makeWheel, makeCaster, paint } from './carmodels.js';
 
 /*
- * Turbo Dismount-style vehicles: a raycast-vehicle chassis, the dummy strapped
- * to the seat with a breakable joint. Hit something hard enough and the seat
- * joint saturates (or the chassis decelerates too fast) and he's ejected.
+ * Turbo Dismount-style vehicles: a raycast-vehicle chassis on sprung wheels,
+ * the dummy strapped to the seat with breakable joints. W accelerates, S
+ * brakes (and reverses once stopped), Space is the handbrake. Hit something
+ * hard enough and the seat joint saturates (or the chassis decelerates too
+ * fast) and he's ejected.
+ *
+ * Suspension: each wheel is a spring-damper (stiffness and damping are per
+ * unit of chassis mass, so they read as frequencies); body roll is left in so
+ * the car leans in corners and pitches under braking.
  */
 
 export const VEHICLE_TYPES = {
   carrito: {
-    name: 'CARRITO', mass: 90, he: [0.32, 0.12, 0.5], wheelR: 0.1, track: 0.3, base: 0.42, wheelY: -0.12,
-    engine: 1100, maxSpeed: 16, seat: [0, 0.55, -0.05], seatForce: 4000, handForce: 450, susp: 0.12, stiff: 60, grip: 1.8,
+    name: 'CARRITO', mass: 45, he: [0.27, 0.05, 0.45], wheelR: 0.065, track: 0.25, base: 0.38, wheelY: 0,
+    engine: 1300, maxSpeed: 11, reverse: 3, brake: 3.5,
+    seat: [0, 0.36, -0.1], grip: [0.0, 0.62, 0.36], gripSpread: 0.24,
+    seatForce: 3200, handForce: 420, susp: 0.07, stiff: 320, damp: [7, 10], roll: 0.4, friction: 1.6, stabilise: 30,
+    extraShapes: [[[0.28, 0.23, 0.46], [0, 0.55, 0]]], ground: -0.105, legs: [-1.45, 0.25],
   },
   coche: {
-    name: 'DESCAPOTABLE', mass: 1100, he: [0.85, 0.3, 2.0], wheelR: 0.34, track: 0.78, base: 1.35, wheelY: -0.25,
-    engine: 5200, maxSpeed: 31, seat: [0.4, 0.42, -0.2], seatForce: 6500, handForce: 600, susp: 0.3, stiff: 28, grip: 2.2,
+    name: 'DESCAPOTABLE', mass: 1100, he: [0.85, 0.3, 2.0], wheelR: 0.34, track: 0.76, base: 1.35, wheelY: -0.25,
+    engine: 11000, maxSpeed: 34, reverse: 7, brake: 9,
+    seat: [0.4, -0.08, -0.2], grip: null, seatForce: 6500, handForce: 600,
+    susp: 0.32, stiff: 22, damp: [2.2, 3.4], roll: 0.22, friction: 2.4, downforce: 1.4,
+    extraShapes: [[[0.85, 0.06, 0.6], [0, 0.36, 1.4]]], ground: -0.79,
   },
   cohete: {
-    name: 'TRINEO COHETE', mass: 260, he: [0.55, 0.12, 1.3], wheelR: 0.16, track: 0.5, base: 1.0, wheelY: -0.1,
-    engine: 0, thrust: 9500, maxSpeed: 36, seat: [0, 0.3, -0.3], seatForce: 4200, handForce: 450, susp: 0.15, stiff: 45, grip: 1.2,
+    name: 'TRINEO COHETE', mass: 650, he: [0.62, 0.09, 1.45], wheelR: 0.2, track: 0.62, base: 1.05, wheelY: -0.05,
+    engine: 0, thrust: 15000, maxSpeed: 42, reverse: 0, brake: 8,
+    seat: [0, 0.2, -0.2], grip: null, seatForce: 4800, handForce: 520,
+    susp: 0.16, stiff: 75, damp: [3.4, 5.2], roll: 0.05, friction: 2.6, downforce: 2.5, stabilise: 14, yawAssist: 1.0,
+    extraShapes: [], ground: -0.36,
   },
 };
 export const VEHICLE_ORDER = ['carrito', 'coche', 'cohete'];
 
 function buildMesh(type, def) {
   const g = new THREE.Group();
-  const [hx, hy, hz] = def.he;
   if (type === 'carrito') {
-    const wire = new THREE.MeshStandardMaterial({ color: 0xb8bcc2, metalness: 0.8, roughness: 0.35, wireframe: true });
-    const basket = new THREE.Mesh(new THREE.BoxGeometry(hx * 2, 0.5, hz * 2, 6, 4, 8), wire);
-    basket.position.y = 0.37;
-    const floor = new THREE.Mesh(new THREE.BoxGeometry(hx * 2, 0.03, hz * 2), lv.stdMat(0x8a8e94, { metalness: 0.7, roughness: 0.4 }));
-    floor.position.y = 0.12;
-    const handle = new THREE.Mesh(new THREE.CylinderGeometry(0.02, 0.02, hx * 2.1, 8), lv.stdMat(0xd8402a, { roughness: 0.5 }));
-    handle.rotation.z = Math.PI / 2; handle.position.set(0, 0.72, -hz - 0.12);
-    const frame = new THREE.Mesh(new THREE.BoxGeometry(hx * 1.6, 0.04, hz * 2), lv.stdMat(0x8a8e94, { metalness: 0.7 }));
-    g.add(basket, floor, handle, frame);
+    g.add(makeTrolley({ ground: def.ground }));
   } else if (type === 'coche') {
-    const paint = lv.stdMat(0x8a2a22, { roughness: 0.3, metalness: 0.5 });
-    const lower = new THREE.Mesh(new THREE.BoxGeometry(hx * 2, hy * 2, hz * 2), paint);
-    const hood = new THREE.Mesh(new THREE.BoxGeometry(hx * 2, 0.12, 1.2), paint);
-    hood.position.set(0, hy + 0.06, hz - 0.6);
-    const trunk = hood.clone(); trunk.position.z = -hz + 0.5; trunk.scale.z = 0.8;
-    const glass = new THREE.Mesh(new THREE.BoxGeometry(hx * 1.9, 0.4, 0.05), lv.stdMat(0x9fd3ff, { roughness: 0.05, metalness: 0.6, transparent: true, opacity: 0.45 }));
-    glass.position.set(0, hy + 0.32, hz - 1.3); glass.rotation.x = -0.45;
-    const seatM = new THREE.Mesh(new THREE.BoxGeometry(0.5, 0.15, 0.5), lv.stdMat(0x1c1c1c));
-    seatM.position.set(def.seat[0], hy + 0.02, def.seat[2]);
-    const back = new THREE.Mesh(new THREE.BoxGeometry(0.5, 0.6, 0.1), lv.stdMat(0x1c1c1c));
-    back.position.set(def.seat[0], hy + 0.3, def.seat[2] - 0.3);
-    const wheel = new THREE.Mesh(new THREE.TorusGeometry(0.16, 0.025, 6, 20), lv.stdMat(0x1c1c1c));
-    wheel.position.set(def.seat[0], hy + 0.35, def.seat[2] + 0.55); wheel.rotation.x = -0.9;
-    g.add(lower, hood, trunk, glass, seatM, back, wheel);
+    g.add(makeConvertible(0x9c2a1f, { ground: def.ground, base: def.base, seat: def.seat }));
   } else {
-    const deck = new THREE.Mesh(new THREE.BoxGeometry(hx * 2, hy * 2, hz * 2), lv.stdMat(0x3a3d42, { metalness: 0.6, roughness: 0.4 }));
-    const tube = new THREE.Mesh(new THREE.CylinderGeometry(0.22, 0.26, 1.3, 16), lv.stdMat(0xe0b13a, { metalness: 0.4, roughness: 0.4 }));
-    tube.rotation.x = Math.PI / 2; tube.position.set(0, 0.32, -hz + 0.2);
-    const nozzle = new THREE.Mesh(new THREE.CylinderGeometry(0.28, 0.2, 0.25, 16), lv.stdMat(0x222222, { metalness: 0.8 }));
-    nozzle.rotation.x = Math.PI / 2; nozzle.position.set(0, 0.32, -hz - 0.5);
+    const [hx, hy, hz] = def.he;
+    // sled: a flat deck on outriggers, the motor behind the seat, fins at the back
+    const steel = lv.stdMat(0x3a3d42, { metalness: 0.7, roughness: 0.35 });
+    const deck = new THREE.Mesh(new THREE.BoxGeometry(hx * 2, hy * 2, hz * 2), steel);
+    const nose = new THREE.Mesh(new THREE.ConeGeometry(hx * 0.95, 0.9, 4, 1).rotateX(Math.PI / 2).rotateZ(Math.PI / 4), paint(0xe0b13a));
+    nose.scale.y = 0.25; nose.position.set(0, 0, hz + 0.42);
+    const tube = new THREE.Mesh(new THREE.CylinderGeometry(0.22, 0.27, 1.5, 20), paint(0xe0b13a));
+    tube.rotation.x = Math.PI / 2; tube.position.set(0, 0.3, -hz + 0.3);
+    const bell = new THREE.Mesh(new THREE.CylinderGeometry(0.3, 0.2, 0.3, 20, 1, true), lv.stdMat(0x222222, { metalness: 0.85, roughness: 0.3 }));
+    bell.material.side = THREE.DoubleSide;
+    bell.rotation.x = Math.PI / 2; bell.position.set(0, 0.3, -hz - 0.58);
     const bar = new THREE.Mesh(new THREE.CylinderGeometry(0.025, 0.025, 0.7, 8), lv.stdMat(0xd8402a));
-    bar.rotation.z = Math.PI / 2; bar.position.set(0, 0.55, def.seat[2] + 0.55);
-    g.add(deck, tube, nozzle, bar);
+    bar.rotation.z = Math.PI / 2; bar.position.set(0, 0.62, def.seat[2] + 0.55);
+    const seatM = new THREE.Mesh(new THREE.BoxGeometry(0.46, 0.1, 0.5), lv.stdMat(0x2a2320, { roughness: 0.8 }));
+    seatM.position.set(0, hy + 0.05, def.seat[2]);
+    const back = new THREE.Mesh(new THREE.BoxGeometry(0.46, 0.5, 0.08), lv.stdMat(0x2a2320, { roughness: 0.8 }));
+    back.position.set(0, hy + 0.3, def.seat[2] - 0.3);
+    g.add(deck, nose, tube, bell, bar, seatM, back);
+    for (const sx of [1, -1]) {
+      const fin = new THREE.Mesh(new THREE.BoxGeometry(0.04, 0.42, 0.55), paint(0xd8402a));
+      fin.position.set(sx * 0.32, 0.55, -hz + 0.1); fin.rotation.z = sx * 0.5;
+      const rail = new THREE.Mesh(new THREE.BoxGeometry(0.08, 0.08, hz * 2.1), steel);
+      rail.position.set(sx * (hx + 0.02), -0.02, 0);
+      g.add(fin, rail);
+    }
+    const tailFin = new THREE.Mesh(new THREE.BoxGeometry(0.04, 0.5, 0.5), paint(0xd8402a));
+    tailFin.position.set(0, 0.75, -hz + 0.05);
+    g.add(tailFin);
   }
   g.traverse((o) => { if (o.isMesh) { o.castShadow = true; o.receiveShadow = true; } });
   return g;
 }
+
+// a coil spring of unit height along y, for the visible suspension
+let coilGeo = null;
+function coil() {
+  if (!coilGeo) {
+    const pts = [];
+    for (let i = 0; i <= 120; i++) { const t = i / 120; const a = t * Math.PI * 2 * 7; pts.push(new THREE.Vector3(Math.cos(a) * 0.05, t, Math.sin(a) * 0.05)); }
+    coilGeo = new THREE.TubeGeometry(new THREE.CatmullRomCurve3(pts), 160, 0.009, 5, false);
+  }
+  return coilGeo;
+}
+
+const _v = new CANNON.Vec3(), _v2 = new CANNON.Vec3(), _v3 = new CANNON.Vec3();
 
 export class Vehicle {
   constructor(type, pos, yaw) {
@@ -86,19 +113,17 @@ export class Vehicle {
       angularDamping: 0.3, linearDamping: 0.01, allowSleep: false,
     });
     chassis.addShape(new CANNON.Box(new CANNON.Vec3(hx, hy, hz)));
-    if (type === 'coche') {
-      chassis.addShape(new CANNON.Box(new CANNON.Vec3(hx, 0.06, 0.6)), new CANNON.Vec3(0, hy + 0.06, hz - 0.6));
-    }
-    if (type === 'cohete') chassis.addShape(new CANNON.Cylinder(0.24, 0.24, 1.3, 10), new CANNON.Vec3(0, 0.32, -hz + 0.2), new CANNON.Quaternion().setFromEuler(Math.PI / 2, 0, 0));
-    chassis.position.set(pos.x, pos.y + def.wheelR + def.susp + hy + 0.1, pos.z);
+    for (const [he, off] of def.extraShapes) chassis.addShape(new CANNON.Box(new CANNON.Vec3(...he)), new CANNON.Vec3(...off));
+    if (type === 'cohete') chassis.addShape(new CANNON.Cylinder(0.24, 0.24, 1.4, 10), new CANNON.Vec3(0, 0.3, -hz + 0.3), new CANNON.Quaternion().setFromEuler(Math.PI / 2, 0, 0));
+    chassis.position.set(pos.x, pos.y - def.ground + 0.05, pos.z);
     chassis.quaternion.setFromEuler(0, yaw, 0);
     chassis.userData = { kind: 'vehicle', vehicle: this };
 
     const rv = this.rv = new CANNON.RaycastVehicle({ chassisBody: chassis, indexRightAxis: 0, indexUpAxis: 1, indexForwardAxis: 2 });
     const opts = {
       radius: def.wheelR, directionLocal: new CANNON.Vec3(0, -1, 0), suspensionStiffness: def.stiff,
-      suspensionRestLength: def.susp, frictionSlip: def.grip, dampingRelaxation: 2.3, dampingCompression: 4.4,
-      maxSuspensionForce: 1e6, rollInfluence: 0.02, axleLocal: new CANNON.Vec3(-1, 0, 0),
+      suspensionRestLength: def.susp, frictionSlip: def.friction, dampingRelaxation: def.damp[0], dampingCompression: def.damp[1],
+      maxSuspensionForce: 1e6, rollInfluence: def.roll, axleLocal: new CANNON.Vec3(-1, 0, 0),
       chassisConnectionPointLocal: new CANNON.Vec3(), maxSuspensionTravel: def.susp,
       customSlidingRotationalSpeed: -30, useCustomSlidingRotationalSpeed: true,
     };
@@ -114,13 +139,21 @@ export class Vehicle {
     this.mesh.traverse((o) => { if (o.isMesh) o.userData.body = chassis; });
     track(chassis, this.mesh);
     this.wheelMeshes = rv.wheelInfos.map(() => {
-      const w = new THREE.Mesh(new THREE.CylinderGeometry(def.wheelR, def.wheelR, def.wheelR * 0.7, 16), lv.stdMat(0x1a1a1a, { roughness: 0.9 }));
-      w.geometry.rotateZ(Math.PI / 2);
-      w.castShadow = true;
+      const w = type === 'carrito' ? makeCaster(def.wheelR) : makeWheel(def.wheelR, type === 'coche' ? 0.22 : 0.14, type === 'coche' ? 5 : 6);
       L.scene.add(w); L.meshes.push(w);
       return w;
     });
+    // springs between the chassis and each hub, in chassis space
+    const springMat = lv.stdMat(type === 'coche' ? 0xd8402a : 0xc9cdd2, { metalness: 0.7, roughness: 0.35 });
+    this.springs = rv.wheelInfos.map((wi) => {
+      const s = new THREE.Mesh(coil(), springMat);
+      s.position.set(wi.chassisConnectionPointLocal.x * 0.9, wi.chassisConnectionPointLocal.y, wi.chassisConnectionPointLocal.z);
+      s.scale.set(def.wheelR * 4, 1, def.wheelR * 4);
+      this.mesh.add(s);
+      return s;
+    });
     this.constraints = [];
+    this.throttle = 0;
   }
 
   seat(rag) {
@@ -134,16 +167,20 @@ export class Vehicle {
     rag.state = 'seated';
     rag.seat = this;
     rag.setCollisionMask(MASK_ALL & ~GROUP.VEHICLE);
+    // legs fold into the footwell over a few frames: until ejected they must
+    // not stand on the road and lift the car off its wheels
+    for (const p of rag.parts) if (/^(thigh|shin|foot)/.test(p.name)) p.body.collisionFilterMask = MASK_ALL & ~GROUP.VEHICLE & ~GROUP.STATIC;
     const pelvis = rag.pelvis;
     const c = new CANNON.PointToPointConstraint(pelvis, new CANNON.Vec3(0, -0.06, 0), ch, new CANNON.Vec3(def.seat[0], def.seat[1], def.seat[2]), def.seatForce);
     world.addConstraint(c);
     this.seatC = c;
     this.constraints.push(c);
-    // hands on the wheel / bar
+    // hands on the wheel / bar / basket rim
+    const grip = def.grip || [def.seat[0], def.seat[1] + 0.3, def.seat[2] + 0.5];
+    const spread = def.gripSpread || 0.17;
     for (const [S, sx] of [['L', 1], ['R', -1]]) {
       const hand = rag.partMap['hand' + S].body;
-      const grip = new CANNON.Vec3(def.seat[0] + 0.17 * sx, def.seat[1] + 0.3, def.seat[2] + 0.5);
-      const hc = new CANNON.PointToPointConstraint(hand, new CANNON.Vec3(0, -0.04, 0), ch, grip, def.handForce);
+      const hc = new CANNON.PointToPointConstraint(hand, new CANNON.Vec3(0, -0.04, 0), ch, new CANNON.Vec3(grip[0] + spread * sx, grip[1], grip[2]), def.handForce);
       world.addConstraint(hc);
       this.constraints.push(hc);
     }
@@ -162,7 +199,7 @@ export class Vehicle {
     rag.seat = null;
     rag.state = 'fall';
     rag.stateT = 0; rag.restT = 0;
-    rag.maskRestoreT = 0.35;
+    rag.maskRestoreT = 0.6;
     rag.events.push({ type: 'eject', rag, reason, point: new THREE.Vector3().copy(rag.chest.position), speed: this.chassis.velocity.length() });
   }
 
@@ -170,28 +207,74 @@ export class Vehicle {
     const def = this.def;
     const ch = this.chassis;
     const v = ch.velocity;
-    // forward speed
-    const fwd = ch.vectorToWorldFrame(new CANNON.Vec3(0, 0, 1), new CANNON.Vec3());
+    const fwd = ch.vectorToWorldFrame(_v.set(0, 0, 1), _v2);
     const speed = v.x * fwd.x + v.y * fwd.y + v.z * fwd.z;
-    if (input.launch && !this.launched) { this.launched = true; sfx.whoosh(); }
-    const steer = (input.steer || 0) * (0.5 - Math.min(0.35, Math.abs(speed) / 80));
+    const driving = !this.ejected;
+    const th = driving ? (input.throttle || 0) : 0;
+    if (th !== 0 && !this.launched) { this.launched = true; if (def.thrust) sfx.whoosh(); }
+    // the throttle eases in and out instead of snapping
+    this.throttle += (th - this.throttle) * Math.min(1, dt * 6);
+
+    const steer = (driving ? input.steer || 0 : 0) * (0.5 - Math.min(0.34, Math.abs(speed) / 70));
     this.rv.setSteeringValue(steer, 0);
     this.rv.setSteeringValue(steer, 1);
-    if (this.launched && !this.ejected) {
-      if (def.thrust) {
-        if (speed < def.maxSpeed) { ch.force.x += fwd.x * def.thrust; ch.force.y += fwd.y * def.thrust; ch.force.z += fwd.z * def.thrust; }
-      } else {
-        const f = speed < def.maxSpeed ? def.engine : 0;
-        for (let i = 0; i < 4; i++) this.rv.applyEngineForce(-f, i);
-      }
+
+    // Braking is a force against the motion through the tyres, so the tyres'
+    // grip limits it like any other (cannon's own brake ignores grip and can
+    // stop a car dead from 120 km/h, flipping it over its nose).
+    let engine = 0, hold = 0;
+    const T = this.throttle;
+    const brakeF = (def.mass + 75) * def.brake;
+    if (!this.launched) hold = 1;                                   // parked until you touch the throttle
+    else if (T > 0.05) {
+      if (speed < -0.5) engine = -brakeF * T;                       // rolling back: W brakes first
+      else if (!def.thrust && speed < def.maxSpeed) engine = def.engine * T;
+    } else if (T < -0.05) {
+      if (speed > 0.5) engine = -brakeF * -T;                       // S brakes...
+      else if (def.reverse && speed > -def.reverse) engine = def.engine * 0.6 * T; // ...then reverses
+      else hold = 1;
+    }
+    if (speed < 0 && engine < 0 && T > 0.05) engine = brakeF * T;     // braking a backward roll pushes forward
+    for (let i = 0; i < 4; i++) {
+      this.rv.applyEngineForce(-engine / 4, i);
+      this.rv.setBrake(hold ? def.mass * 2 : 0, i);
+    }
+    if (driving && input.handbrake && this.launched) {
+      // rear wheels lock: they slide and the tail steps out
+      const f = Math.sign(speed) * brakeF * 0.35;
+      this.rv.applyEngineForce(f / 2, 2); this.rv.applyEngineForce(f / 2, 3);
+      this.rv.wheelInfos[2].frictionSlip = this.rv.wheelInfos[3].frictionSlip = def.friction * 0.45;
     } else {
-      for (let i = 0; i < 4; i++) this.rv.applyEngineForce(0, i);
+      this.rv.wheelInfos[2].frictionSlip = this.rv.wheelInfos[3].frictionSlip = def.friction;
+    }
+
+    // rocket thrust
+    if (def.thrust && driving && T > 0.05 && speed < def.maxSpeed) {
+      const f = def.thrust * T;
+      ch.force.x += fwd.x * f; ch.force.y += fwd.y * f; ch.force.z += fwd.z * f;
+    }
+    // aero: downforce grows with speed and keeps the wheels planted
+    if (def.downforce) {
+      const up = ch.vectorToWorldFrame(_v.set(0, 1, 0), _v3);
+      const df = def.downforce * speed * speed;
+      ch.force.x -= up.x * df; ch.force.y -= up.y * df; ch.force.z -= up.z * df;
+    }
+    // fins: resist rolling over and help the nose follow the steering
+    if (def.stabilise) {
+      const up = ch.vectorToWorldFrame(_v.set(0, 1, 0), _v3);
+      const m = def.mass;
+      const k = def.stabilise * m * Math.min(1, 0.3 + Math.abs(speed) / 15);
+      // torque = k * (up x worldUp) = k * (-up.z, 0, up.x), damped on roll/pitch rate
+      const w = ch.angularVelocity;
+      ch.torque.x += -up.z * k - w.x * m * 0.8;
+      ch.torque.z += up.x * k - w.z * m * 0.8;
+      if (driving && def.yawAssist) ch.torque.y += (input.steer || 0) * m * def.yawAssist * Math.min(1, Math.abs(speed) / 6) * Math.sign(speed || 1) - w.y * m * 0.3;
     }
 
     this.age = (this.age || 0) + dt;
     if (this.rag && !this.ejected && this.launched && this.age > 1) {
       // ejection: violent deceleration, saturated seat joint, or upside down
-      // forward speed lost over the last ~0.1 s: a wall eats 10+ m/s, a ramp barely 1
+      // forward speed lost over the last ~0.1 s: a wall eats 10+ m/s, braking barely 1
       this.speedHist = this.speedHist || [];
       const mag = Math.hypot(v.x, v.y, v.z);
       this.speedHist.push(mag);
@@ -200,12 +283,11 @@ export class Vehicle {
       const drop = peak - mag;
       const dropLimit = Math.max(5.5, peak * 0.22);
       // how far the pelvis has been dragged off the seat: the strap is giving way
-      const def2 = this.def;
-      const seatW = ch.pointToWorldFrame(new CANNON.Vec3(def2.seat[0], def2.seat[1], def2.seat[2]), new CANNON.Vec3());
-      const pv = this.rag.pelvis.pointToWorldFrame(new CANNON.Vec3(0, -0.06, 0), new CANNON.Vec3());
+      const seatW = ch.pointToWorldFrame(_v.set(def.seat[0], def.seat[1], def.seat[2]), new CANNON.Vec3());
+      const pv = this.rag.pelvis.pointToWorldFrame(_v.set(0, -0.06, 0), new CANNON.Vec3());
       const sep = Math.hypot(seatW.x - pv.x, seatW.y - pv.y, seatW.z - pv.z);
       this.satT = sep > 0.45 ? this.satT + dt : 0;
-      const up = ch.vectorToWorldFrame(new CANNON.Vec3(0, 1, 0), new CANNON.Vec3());
+      const up = ch.vectorToWorldFrame(_v.set(0, 1, 0), new CANNON.Vec3());
       if (drop > dropLimit || this.satT > 0.06) this.eject('impact');
       this.rollT = up.y < 0.1 ? (this.rollT || 0) + dt : 0;
       if (this.rollT > 0.3) this.eject('roll');
@@ -214,14 +296,20 @@ export class Vehicle {
   }
 
   frame() {
+    const def = this.def;
     for (let i = 0; i < this.rv.wheelInfos.length; i++) {
       this.rv.updateWheelTransform(i);
-      const t = this.rv.wheelInfos[i].worldTransform;
+      const wi = this.rv.wheelInfos[i];
+      const t = wi.worldTransform;
       this.wheelMeshes[i].position.set(t.position.x, t.position.y, t.position.z);
       this.wheelMeshes[i].quaternion.set(t.quaternion.x, t.quaternion.y, t.quaternion.z, t.quaternion.w);
+      // spring from its mount down to the hub
+      const s = this.springs[i];
+      s.position.y = wi.chassisConnectionPointLocal.y - wi.suspensionLength;
+      s.scale.y = Math.max(0.03, wi.suspensionLength + def.wheelR * 0.4);
     }
-    if (this.def.thrust && this.launched && !this.ejected) {
-      const p = this.chassis.pointToWorldFrame(new CANNON.Vec3(0, 0.32, -this.def.he[2] - 0.7), new CANNON.Vec3());
+    if (def.thrust && this.launched && !this.ejected && this.throttle > 0.05) {
+      const p = this.chassis.pointToWorldFrame(new CANNON.Vec3(0, 0.3, -def.he[2] - 0.75), new CANNON.Vec3());
       fx.trail(new THREE.Vector3(p.x, p.y, p.z));
     }
   }

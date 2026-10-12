@@ -6,6 +6,7 @@ import { gridTexture, buildingTexture, hazardTexture } from './textures.js';
 import { MAT } from './physics.js';
 import * as fx from './fx.js';
 import * as sfx from './audio.js';
+import { makeCar, makeBus, makeTruck } from './carmodels.js';
 
 const PI = Math.PI;
 
@@ -363,12 +364,12 @@ export const MAPS = [
     build() {
       lv.floor([200, 1, 320], [0, -0.5, 60], gridTexture('#55585e', '#4a4d52'), 0xffffff);
       lv.staticBox([8, 8, 10], [0, 4, -36], { color: 0x6f6c66 });
-      lv.staticBox([8, 0.5, 32], [0, 3.62, -15.54], { rot: [Math.atan2(8, 30), 0, 0], color: 0x8f8c86 });
+      curvedRamp(0, 8, -31, 8, 5);
       for (let z = 0; z < 125; z += 6) lv.decoMesh(at(new THREE.Mesh(new THREE.BoxGeometry(0.25, 0.02, 3), lv.stdMat(0xf2f2f2)), 0, 0.01, z));
       for (let z = 4; z < 118; z += 4.2) {
         for (const x of [-7.5, 7.5]) lv.staticBox([0.6, 0.9, 4], [x, 0.45, z], { color: 0xb8b4aa });
       }
-      lv.staticBox([4, 0.4, 6], [-3.2, 0.7, 58], { rot: [-0.24, 0, 0], color: 0xe0b13a });
+      kicker(-3.2, 4, 53, 6, 1.4);
       for (let i = 0; i < 8; i++) lv.box([0.35, 0.6, 0.35], [3.5 - (i % 2) * 1.2, 0.3, 40 + i * 3], 2, 0xd9682b);
       lv.staticBox([14, 5, 2], [0, 2.5, 126], { color: 0x8f8c86 });
       lv.decoMesh(at(new THREE.Mesh(new THREE.BoxGeometry(14.02, 0.6, 2.02), new THREE.MeshStandardMaterial({ map: hazardTexture([10, 1]) })), 0, 4.4, 126));
@@ -397,27 +398,18 @@ export const MAPS = [
       for (let z = 0; z < 140; z += 6) if (Math.abs(z - 70) > 8) lv.decoMesh(at(new THREE.Mesh(new THREE.BoxGeometry(0.25, 0.02, 3), lv.stdMat(0xf2f2f2)), 0, 0.05, z));
       for (let x = -100; x < 100; x += 6) if (Math.abs(x) > 8) lv.decoMesh(at(new THREE.Mesh(new THREE.BoxGeometry(3, 0.02, 0.25), lv.stdMat(0xe0b13a)), x, 0.06, 70));
       lv.staticBox([8, 8, 10], [0, 4, -36], { color: 0x6f6c66 });
-      lv.staticBox([8, 0.5, 32], [0, 3.62, -15.54], { rot: [Math.atan2(8, 30), 0, 0], color: 0x8f8c86 });
-      // cross traffic: buses and trucks that loop forever
-      const colors = [0xd9a92b, 0x8a2a22, 0x3a4a5c, 0xe8e4da];
-      for (let i = 0; i < 6; i++) {
+      curvedRamp(0, 8, -31, 8, 5);
+      // cross traffic that loops forever: buses, box trucks, vans and cars
+      const fleet = [
+        ['bus', 0xd9a92b, 11], ['sedan', 0x8a2a22], ['truck', 0x3a4a5c, 7.2], ['van', 0xe8e4da],
+        ['hatch', 0x2f6f8f], ['bus', 0xb8b4aa, 10], ['sedan', 0x1f1f22], ['truck', 0x8a2a22, 6.5],
+      ];
+      fleet.forEach(([kind, color, len], i) => {
         const dir = i % 2 ? 1 : -1;
         const lane = dir > 0 ? 66.8 : 73.2;
-        const len = i % 3 === 0 ? 10 : 6;
-        const g = new THREE.Group();
-        const body = new THREE.Mesh(new THREE.BoxGeometry(len, 2.6, 2.4), lv.stdMat(colors[i % 4], { roughness: 0.5, metalness: 0.2 }));
-        body.position.y = 1.6;
-        const glass = new THREE.Mesh(new THREE.BoxGeometry(len * 0.9, 0.7, 2.42), lv.stdMat(0x1d2a35, { roughness: 0.1, metalness: 0.5 }));
-        glass.position.y = 2.2;
-        g.add(body, glass);
-        const speed = 13 + (i % 3) * 2;
-        const span = 220;
-        const off = i * 37;
-        lv.kinematic([lv.boxShape(len, 2.6, 2.4, [0, 1.6, 0])], g, (t) => {
-          const x = ((off + t * speed) % span) - span / 2;
-          return { pos: [x * dir, 0, lane], quat: new THREE.Quaternion() };
-        });
-      }
+        const speed = kind === 'bus' || kind === 'truck' ? 12 + (i % 3) : 15 + (i % 3) * 2;
+        trafficVehicle(kind, color, len, dir, lane, speed, i * 29);
+      });
       lv.staticBox([10, 0.3, 8], [16, 0.15, 84], { color: 0xb8b4aa });
       for (const [x, z] of [[13, 82], [14, 83], [13.5, 84], [18, 86], [19, 85]]) lv.barrel([x, 0.8, z]);
       lv.staticBox([0.3, 4, 0.3], [12, 2, 80], { color: 0xd8402a });
@@ -425,7 +417,7 @@ export const MAPS = [
       lv.staticBox([9, 0.3, 7], [16, 4.1, 83], { color: 0xe8e4da });
       lv.staticBox([4, 0.1, 1.6], [-8, 2.6, 60], { color: 0x3a3d42 });
       lv.staticBox([0.1, 2.6, 1.6], [-10, 1.3, 60], { color: 0x3a3d42 });
-      for (let i = 0; i < 4; i++) lv.box([1.9, 1.3, 4.2], [-9, 0.65, 90 + i * 6], 900, [0x8a2a22, 0x3a4a5c, 0xb8b4aa, 0x2a2a2e][i]);
+      for (let i = 0; i < 4; i++) car([-9, 0.76, 90 + i * 6], [0x8a2a22, 0x3a4a5c, 0xb8b4aa, 0x2a2a2e][i], 0, i % 2 ? 'hatch' : 'sedan');
       lv.staticBox([30, 12, 4], [0, 6, 142], { mat: new THREE.MeshStandardMaterial({ map: buildingTexture('#8a8f96', [6, 3]), roughness: 0.85 }) });
       crateWall(0, 136, 8, 3, 0.8);
     },
@@ -530,23 +522,102 @@ function wreckingBall(pivot, len, amp, freq) {
     (t) => ({ pos: pivot, quat: new THREE.Quaternion().setFromAxisAngle(axis, amp * Math.sin(t * freq * PI * 2)) }));
 }
 
-function car(pos, color, yaw) {
-  const g = new THREE.Group();
-  const body = new THREE.Mesh(new THREE.BoxGeometry(1.9, 0.8, 4.2), lv.stdMat(color, { roughness: 0.35, metalness: 0.4 }));
-  const top = new THREE.Mesh(new THREE.BoxGeometry(1.7, 0.65, 2.2), lv.stdMat(0x9fd3ff, { roughness: 0.1, metalness: 0.6 }));
-  top.position.set(0, 0.7, -0.2);
-  g.add(body, top);
-  for (const [x, z] of [[0.9, 1.3], [-0.9, 1.3], [0.9, -1.3], [-0.9, -1.3]]) {
-    const w = new THREE.Mesh(new THREE.CylinderGeometry(0.38, 0.38, 0.28, 14), lv.stdMat(0x1a1a1a));
-    w.rotation.z = PI / 2; w.position.set(x, -0.38, z); g.add(w);
-  }
+function car(pos, color, yaw, kind = 'sedan') {
+  // body origin sits 0.76 m above the ground (the old box car's centre)
+  const g = makeCar(kind, color, { ground: -0.76 });
+  const len = kind === 'hatch' ? 3.9 : 4.4;
   const b = lv.dynamicBody([
-    lv.boxShape(1.9, 0.8, 4.2),
-    lv.boxShape(1.7, 0.65, 2.2, [0, 0.7, -0.2]),
-    lv.boxShape(1.9, 0.4, 3.6, [0, -0.4, 0]),
-  ], pos, 900, g, { rot: [0, yaw, 0], material: MAT.vehicle });
+    lv.boxShape(1.8, 0.72, len - 0.1, [0, -0.12, 0]),
+    lv.boxShape(1.55, 0.5, len * 0.45, [0, 0.47, -0.25]),
+    lv.boxShape(1.6, 0.36, len - 0.6, [0, -0.58, 0]),
+  ], pos, 1100, g, { rot: [0, yaw, 0], material: MAT.vehicle });
   L.props.push(b);
   return b;
+}
+
+/*
+ * Smooth ramp from a platform edge down to the ground: the profile eases out
+ * of the flat top and into the flat ground (no lip, no kink), so wheels roll
+ * over it instead of bouncing. Physics: overlapping thin slabs along the
+ * curve; visuals: one extruded profile.
+ */
+function curvedRamp(x, width, zTop, yTop, zEnd) {
+  const N = 44, span = zEnd - zTop;
+  const yAt = (z) => { const u = Math.min(1, Math.max(0, (z - zTop) / span)); return yTop * (1 - u * u * (3 - 2 * u)); };
+  for (let i = 0; i < N; i++) {
+    const za = zTop + (span * i) / N, zb = zTop + (span * (i + 1)) / N;
+    const ya = yAt(za), yb = yAt(zb);
+    const len = Math.hypot(zb - za, yb - ya) + 0.12;
+    const ang = Math.atan2(ya - yb, zb - za);
+    const t = 0.5;
+    lv.staticBox([width, t, len], [x, (ya + yb) / 2 - Math.cos(ang) * t / 2, (za + zb) / 2 - Math.sin(ang) * t / 2], { rot: [ang, 0, 0], visible: false });
+  }
+  const shape = new THREE.Shape();
+  shape.moveTo(zTop - 0.01, 0);
+  shape.lineTo(zTop - 0.01, yTop);
+  for (let i = 1; i <= 80; i++) { const z = zTop + (span * i) / 80; shape.lineTo(z, yAt(z)); }
+  shape.lineTo(zEnd, 0);
+  const geo = new THREE.ExtrudeGeometry(shape, { depth: width, bevelEnabled: false, curveSegments: 1 });
+  geo.translate(0, 0, -width / 2);
+  geo.rotateY(-PI / 2);
+  const tex = gridTexture('#93908a', '#86837d');
+  tex.repeat.set(width / 2, span / 2);
+  const m = new THREE.Mesh(geo, new THREE.MeshStandardMaterial({ color: 0xffffff, map: tex, roughness: 0.9 }));
+  m.position.x = x;
+  m.castShadow = true; m.receiveShadow = true;
+  lv.decoMesh(m);
+}
+
+/** A launch kicker with a curved face: zero height at its toe, steepest at the lip. */
+function kicker(x, width, zStart, len, h) {
+  const N = 16;
+  const yAt = (z) => { const u = (z - zStart) / len; return h * u * u; };
+  for (let i = 0; i < N; i++) {
+    const za = zStart + (len * i) / N, zb = zStart + (len * (i + 1)) / N;
+    const ya = yAt(za), yb = yAt(zb);
+    const seg = Math.hypot(zb - za, yb - ya) + 0.06;
+    const ang = Math.atan2(ya - yb, zb - za);
+    const t = 0.3;
+    lv.staticBox([width, t, seg], [x, (ya + yb) / 2 - Math.cos(ang) * t / 2, (za + zb) / 2 - Math.sin(ang) * t / 2], { rot: [ang, 0, 0], visible: false });
+  }
+  const shape = new THREE.Shape();
+  shape.moveTo(zStart, 0);
+  for (let i = 1; i <= 40; i++) { const z = zStart + (len * i) / 40; shape.lineTo(z, yAt(z)); }
+  shape.lineTo(zStart + len, 0);
+  const geo = new THREE.ExtrudeGeometry(shape, { depth: width, bevelEnabled: false });
+  geo.translate(0, 0, -width / 2);
+  geo.rotateY(-PI / 2);
+  const m = new THREE.Mesh(geo, lv.stdMat(0xe0b13a));
+  m.position.x = x;
+  m.castShadow = true; m.receiveShadow = true;
+  lv.decoMesh(m);
+}
+
+/** One looping vehicle of the cross traffic; wheels turn with the distance driven. */
+function trafficVehicle(kind, color, len, dir, lane, speed, offset) {
+  let g, shapes;
+  if (kind === 'bus') {
+    g = makeBus(color, len);
+    shapes = [lv.boxShape(2.5, 2.8, len, [0, 1.75, 0])];
+  } else if (kind === 'truck') {
+    g = makeTruck(color, len);
+    shapes = [lv.boxShape(2.35, 2.7, len - 2.1, [0, 2.15, -1.05]), lv.boxShape(2.3, 2.3, 2.0, [0, 1.6, len / 2 - 1.0]), lv.boxShape(2.0, 0.6, len, [0, 0.7, 0])];
+  } else {
+    g = makeCar(kind, color);
+    const l = kind === 'van' ? 4.9 : kind === 'hatch' ? 3.9 : 4.4, h = kind === 'van' ? 2.0 : 1.4;
+    shapes = [lv.boxShape(1.85, h - 0.3, l, [0, (h + 0.3) / 2, 0])];
+  }
+  const wheels = g.userData.wheels || [];
+  const r = g.userData.wheelR || 0.35;
+  const span = 220;
+  const yaw = dir > 0 ? PI / 2 : -PI / 2;
+  const q = new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0, 1, 0), yaw);
+  lv.kinematic(shapes, g, (t) => {
+    const d = offset + t * speed;
+    const x = (d % span) - span / 2;
+    for (const w of wheels) w.rotation.x = d / r;
+    return { pos: [x * dir, 0, lane], quat: q };
+  });
 }
 
 function plankTexture() {

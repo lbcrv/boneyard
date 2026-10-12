@@ -14,25 +14,23 @@ import * as fluid from './bloodfluid.js';
  *
  * - On the body: the part's material paints blood on the surface (shader), so
  *   it wraps around curved limbs, soaks outward and trickles downward.
- * - On flat fixed ground: a real liquid (bloodfluid.js). Drops land in it,
- *   merge, spread into puddles, get stepped in (bloody footprints) and smeared
- *   by bodies dragged through them.
- * - On walls, props and anything that moves: splash decals. Before placing
- *   one, rays check there is surface under its whole outline, so nothing
- *   overhangs an edge; on a moving body the decal is attached and travels
- *   with it. Big splashes on walls run down in drips.
+ * - On fixed surfaces (floor, walls, ramps): a real liquid (bloodfluid.js).
+ *   Drops land in it and merge, puddles spread, runs slide down walls and
+ *   drip off the edge. It gets stepped in (bloody footprints), smeared by
+ *   bodies dragged through it, and any bloodied hand or limb that touches a
+ *   surface leaves its print.
+ * - On props and anything that moves: splash decals. Before placing one,
+ *   rays check there is surface under its whole outline, so nothing
+ *   overhangs an edge; the decal is attached to the body and travels with it.
  */
 
 let enabled = false;
 let scene;
 let drops;
 const splatSets = [];   // { mesh, cursor, count, attached: Map }
-let runners;
-const MAX_DROPS = 700, MAX_SPLATS_EACH = 150, MAX_RUNNERS = 60, MAX_STAINS = 8;
+const MAX_DROPS = 700, MAX_SPLATS_EACH = 150, MAX_STAINS = 8;
 const dropItems = [];
 let dropCursor = 0;
-const runList = [];
-let runCursor = 0;
 const stained = new Set();
 const _m = new THREE.Matrix4();
 const _m2 = new THREE.Matrix4();
@@ -45,6 +43,7 @@ const _t1 = new THREE.Vector3();
 const _t2 = new THREE.Vector3();
 const _c = new THREE.Color();
 const UP = new THREE.Vector3(0, 1, 0);
+const _dripDir = new THREE.Vector3();
 const Z = new THREE.Vector3(0, 0, 1);
 const ray = new CANNON.RaycastResult();
 const rf = new CANNON.Vec3(), rt = new CANNON.Vec3();
@@ -62,14 +61,6 @@ function liquidTexture(kind, size = 256) {
       const a = Math.random() * Math.PI * 2, d = rnd(20, 62);
       balls.push([c + Math.cos(a) * d, c + Math.sin(a) * d, rnd(12, 30)]);
     }
-  } else if (kind === 'drip') {
-    // a run down a wall: wide where it started, thinning, a bead at the end
-    const x = c + rnd(-4, 4);
-    for (let y = 18; y < size - 30; y += 5) {
-      const k = y / size;
-      balls.push([x + Math.sin(y * 0.05) * 2, y, 9 * (1 - k) + 3]);
-    }
-    balls.push([x, size - 26, 10]);
   } else if (kind === 'drops') {
     for (let i = 0; i < 16; i++) balls.push([rnd(30, size - 30), rnd(30, size - 30), rnd(3, 9)]);
   } else {
@@ -139,10 +130,9 @@ export function initBlood(s, renderer = null) {
   for (const kind of ['splash', 'splash', 'splash', 'drops']) {
     splatSets.push({ mesh: instanced(plane, wetMaterial(liquidTexture(kind), -2), MAX_SPLATS_EACH), cursor: 0, count: 0, kind, attached: new Map() });
   }
-  const drip = new THREE.PlaneGeometry(1, 1).translate(0, -0.5, 0); // hangs from its top edge
-  runners = instanced(drip, wetMaterial(liquidTexture('drip', 128), -2), MAX_RUNNERS);
-  scene.add(drops, runners, ...splatSets.map((s2) => s2.mesh));
-  fluid.initFluid(s, renderer);
+  scene.add(drops, ...splatSets.map((s2) => s2.mesh));
+  // a run reaching the bottom of a wall falls off as drops
+  fluid.initFluid(s, renderer, (p, f, n) => spray(p.addScaledVector(n, 0.02), _dripDir.set(n.x * 0.2, -1, n.z * 0.2), 1, 0.4 + f * 4, 0.2));
 }
 
 export function isBloodOn() { return enabled; }
@@ -157,7 +147,6 @@ export function clearBlood() {
   for (const d of dropItems) d.alive = false;
   drops.count = 0;
   for (const st of splatSets) { st.mesh.count = 0; st.count = 0; st.cursor = 0; st.attached.clear(); }
-  runList.length = 0; runners.count = 0; runCursor = 0;
   fluid.clearFluid();
   for (const part of stained) clearPart(part);
   stained.clear();
@@ -300,6 +289,7 @@ export function wound(part, worldPoint, size = 0.02, severity = 'open', local = 
       st.r = Math.min(0.16, st.r + r * 0.3);
       st.sev = Math.max(st.sev, sev);
       st.bleed = Math.max(st.bleed, bleed);
+      part.bloodWet = Math.max(part.bloodWet || 0, sev ? 1 : 0.7);
       stained.add(part);
       return;
     }
@@ -307,6 +297,7 @@ export function wound(part, worldPoint, size = 0.02, severity = 'open', local = 
   if (part.stains.length >= MAX_STAINS) part.stains.shift();
   part.stains.push({ local: lp, normal: normal ? normal.clone() : localNormal(part, lp), r, cur: r * 0.3, sev, bleed, beat: Math.random(), jetT: 0 });
   part.wounds = part.stains.length;
+  part.bloodWet = Math.max(part.bloodWet || 0, sev ? 1 : 0.7);
   stained.add(part);
 }
 
@@ -334,6 +325,7 @@ export function spray(point, dir, amount = 8, speed = 3, spread = 0.9) {
 
 export function splat(point, normal, size, kind = null, body = null, vel = null) {
   if (!enabled) return;
+  if (fluid.accepts(body, normal)) { fluid.deposit(point, 0.8 + size * 12, vel, normal); return; }
   const want = size * 0.5;
   const r = body ? fitRadius(point, normal, body, want) : want;
   if (r < 0.012) return;
@@ -370,48 +362,17 @@ export function splat(point, normal, size, kind = null, body = null, vel = null)
   set.mesh.count = set.count;
   set.mesh.instanceMatrix.needsUpdate = true;
   set.mesh.instanceColor.needsUpdate = true;
-  // a big splash on a wall runs down it
-  if (body && body.type === CANNON.Body.STATIC && Math.abs(_n.y) < 0.6 && r > 0.04) addRunner(point, _n, body, r);
 }
 
 const _v3 = new THREE.Vector3();
-const _down = new THREE.Vector3();
-function addRunner(point, n, body, r) {
-  _down.set(0, -1, 0).addScaledVector(n, n.y).normalize();
-  // how far down the wall continues
-  let maxLen = 0;
-  for (const L of [0.7, 0.45, 0.25, 0.12]) {
-    const x = point.x + _down.x * L, y = point.y + _down.y * L, z = point.z + _down.z * L;
-    rf.set(x + n.x * 0.04, y + n.y * 0.04, z + n.z * 0.04); rt.set(x - n.x * 0.05, y - n.y * 0.05, z - n.z * 0.05);
-    ray.reset();
-    if (world.raycastClosest(rf, rt, RAY, ray) && ray.body === body) { maxLen = L; break; }
-  }
-  if (maxLen < 0.1) return;
-  const run = runList.length >= MAX_RUNNERS ? runList.shift() : {};
-  run.idx = runCursor;
-  runCursor = (runCursor + 1) % MAX_RUNNERS;
-  run.pos = point.clone().addScaledVector(n, 0.0035);
-  // plane: +Z out of the wall, -Y down the wall
-  const yAx = _down.clone().negate();
-  const xAx = new THREE.Vector3().crossVectors(yAx, n).normalize();
-  run.q = new THREE.Quaternion().setFromRotationMatrix(new THREE.Matrix4().makeBasis(xAx, yAx, n));
-  run.w = Math.min(0.05, r * 0.45) * (0.7 + Math.random() * 0.5);
-  run.len = 0.01;
-  run.max = maxLen * (0.45 + Math.random() * 0.55) * Math.min(1, r * 8);
-  run.v = 0.22 + Math.random() * 0.2;
-  run.tint = 0.75 + Math.random() * 0.3;
-  run.drawn = false;
-  runList.push(run);
-}
-
 /** A pool of blood at a point on the floor (explosions, gibs). */
 export function pool(point, size) {
   if (!enabled) return;
   rf.set(point.x, point.y + 0.2, point.z); rt.set(point.x, point.y - 0.3, point.z);
   ray.reset();
-  if (world.raycastClosest(rf, rt, RAY, ray) && fluid.isFloor(ray.body, ray.hitNormalWorld)) {
+  if (world.raycastClosest(rf, rt, RAY, ray) && fluid.accepts(ray.body, ray.hitNormalWorld)) {
     const hp = ray.hitPointWorld;
-    fluid.deposit(new THREE.Vector3(hp.x, hp.y, hp.z), size * 40);
+    fluid.deposit(new THREE.Vector3(hp.x, hp.y, hp.z), size * 40, null, ray.hitNormalWorld);
   }
 }
 
@@ -424,21 +385,21 @@ export function footstep(rag, S) {
   rf.set(b.position.x, b.position.y + 0.05, b.position.z); rt.set(b.position.x, b.position.y - 0.15, b.position.z);
   ray.reset();
   if (!world.raycastClosest(rf, rt, RAY, ray) || !fluid.isFloor(ray.body, ray.hitNormalWorld)) return;
-  const y = ray.hitPointWorld.y;
+  const fp = new THREE.Vector3(b.position.x, ray.hitPointWorld.y, b.position.z);
+  const fn = new THREE.Vector3(ray.hitNormalWorld.x, ray.hitNormalWorld.y, ray.hitNormalWorld.z);
   const load = rag.bloodFeet || (rag.bloodFeet = { L: 0, R: 0 });
-  _t1.set(0, 0, 1).applyQuaternion(_q.set(b.quaternion.x, b.quaternion.y, b.quaternion.z, b.quaternion.w));
-  const yaw = Math.atan2(_t1.x, _t1.z);
-  const wet = fluid.sample(b.position.x, y, b.position.z, 0.09);
+  const along = new THREE.Vector3(0, 0, 1).applyQuaternion(_q.set(b.quaternion.x, b.quaternion.y, b.quaternion.z, b.quaternion.w));
+  const wet = fluid.sample(fp, fn, 0.09);
   if (wet > 0.08) {
     // stepped in it: the sole soaks up blood, the puddle gets a dent
     load[S] = 1;
-    fluid.take(b.position.x, y, b.position.z, 0.25, 0.07);
+    fluid.take(fp, fn, 0.25, 0.07);
     wound(foot, new THREE.Vector3(b.position.x, b.position.y - 0.03, b.position.z), 0.01, 'minor');
-    if (Math.random() < 0.6) spray(new THREE.Vector3(b.position.x, y + 0.02, b.position.z), new THREE.Vector3(0, 1, 0), 3, 1.1, 1.6);
+    if (Math.random() < 0.6) spray(fp.clone().addScaledVector(fn, 0.02), fn.clone(), 3, 1.1, 1.6);
     return;
   }
   if (load[S] < 0.05) return;
-  fluid.stamp(b.position.x, y, b.position.z, yaw, 0.125, 0.052, 0.32 * load[S], SOLE);
+  fluid.stamp(fp, fn, along, 0.125, 0.052, 0.32 * load[S], SOLE);
   load[S] *= 0.72;
 }
 
@@ -473,7 +434,7 @@ export function update(dt, ragdolls = []) {
       d.alive = false;
       const sp = ray.hitPointWorld, nn = ray.hitNormalWorld;
       const fast = d.vel.length() > 3;
-      if (fluid.isFloor(ray.body, nn)) fluid.deposit(_p.set(sp.x, sp.y, sp.z), 0.12 + d.size * 14, d.vel);
+      if (fluid.accepts(ray.body, nn)) fluid.deposit(_p.set(sp.x, sp.y, sp.z), 0.12 + d.size * 14, d.vel, nn);
       else if (Math.random() < 0.4) splat(new THREE.Vector3(sp.x, sp.y, sp.z), new THREE.Vector3(nn.x, nn.y, nn.z), fast ? 0.07 + d.size * 8 : 0.03 + d.size * 4, fast ? null : 'drops', ray.body, d.vel);
       continue;
     }
@@ -506,8 +467,18 @@ export function update(dt, ragdolls = []) {
   for (const part of stained) {
     const b = part.body;
     const u = part.stainU;
+    const rag = b.userData && b.userData.ragdoll;
     part.stains.forEach((st, i) => {
-      if (st.bleed > 0) st.bleed -= dt;
+      if (st.bleed > 0) {
+        // no heartbeat, no jets: a dead body or a severed piece only oozes for a while
+        if ((part.detached || (rag && rag.dead)) && st.sev === 2) { st.sev = 1; st.bleed = Math.min(st.bleed, part.detached ? 2.5 : 7); st.ooze = true; }
+        // the body only holds so much
+        if (rag && !part.detached) {
+          rag.bloodLeft = (rag.bloodLeft ?? 1) - dt * (st.sev === 2 ? 0.022 : 0.003);
+          if (rag.bloodLeft <= 0) st.bleed = 0;
+        }
+        st.bleed -= dt;
+      }
       if (st.cur < st.r) st.cur = Math.min(st.r, st.cur + dt * st.r * (st.bleed > 0 ? 0.35 : 0.08));
       _wp.set(st.local.x, st.local.y, st.local.z);
       b.pointToWorldFrame(_wp, _wp);
@@ -547,7 +518,8 @@ export function update(dt, ragdolls = []) {
       for (const part of rag.parts) {
         if (!part.stains) continue;
         let flow = 0;
-        for (const st of part.stains) if (st.sev === 2 && st.bleed > 0) flow += Math.min(1, st.bleed / 12);
+        if (part.detached) continue;
+        for (const st of part.stains) if ((st.sev === 2 || st.ooze) && st.bleed > 0) flow += Math.min(1, st.bleed / 12) * (st.ooze ? 0.6 : 1);
         if (flow <= 0) continue;
         const b = part.body;
         if (b.velocity.lengthSquared() > 0.25) continue;
@@ -556,32 +528,8 @@ export function update(dt, ragdolls = []) {
         ray.reset();
         if (!world.raycastClosest(rf, rt, RAY, ray)) continue;
         const sp = ray.hitPointWorld, nn = ray.hitNormalWorld;
-        if (fluid.isFloor(ray.body, nn)) fluid.deposit(_p.set(sp.x + (Math.random() - 0.5) * 0.04, sp.y, sp.z + (Math.random() - 0.5) * 0.04), 0.9 * flow);
+        if (fluid.accepts(ray.body, nn)) fluid.deposit(_p.set(sp.x + (Math.random() - 0.5) * 0.04, sp.y, sp.z + (Math.random() - 0.5) * 0.04), 0.9 * flow, null, nn);
       }
-    }
-  }
-
-  // runs down walls
-  if (runList.length) {
-    let changed = false;
-    for (const run of runList) {
-      if (run.len >= run.max && run.drawn) continue;
-      run.len = Math.min(run.max, run.len + run.v * dt);
-      run.v *= 1 - dt * 0.6;
-      if (run.v < 0.02) run.max = run.len;
-      _s.set(run.w, run.len, 1);
-      _m.compose(run.pos, run.q, _s);
-      runners.setMatrixAt(run.idx, _m);
-      runners.setColorAt(run.idx, _c.setRGB(0.12 * run.tint, 0.002, 0.005));
-      run.drawn = true;
-      changed = true;
-    }
-    if (changed) {
-      let top = 0;
-      for (const r of runList) top = Math.max(top, r.idx + 1);
-      runners.count = Math.max(runners.count, top);
-      runners.instanceMatrix.needsUpdate = true;
-      if (runners.instanceColor) runners.instanceColor.needsUpdate = true;
     }
   }
 
@@ -603,7 +551,8 @@ export function update(dt, ragdolls = []) {
         if (ray.distance > part.bbr + 0.04) continue;
         const hp = ray.hitPointWorld;
         // lying in a puddle soaks the part that touches it
-        const wet = fluid.sample(hp.x, hp.y, hp.z, Math.min(0.08, part.bbr * 0.6));
+        const hn = ray.hitNormalWorld;
+        const wet = fluid.sample(hp, hn, Math.min(0.08, part.bbr * 0.6));
         if (wet > 0.1) {
           part.bloodWet = 1;
           if ((part.soakT || -9) < rag.time - 0.8) {
@@ -613,13 +562,70 @@ export function update(dt, ragdolls = []) {
         }
         const sp = Math.hypot(b.velocity.x, b.velocity.z);
         if (!part.bloodWet || part.bloodWet < 0.05 || sp < 0.35) continue;
-        const yaw = Math.atan2(b.velocity.x, b.velocity.z);
         const len = Math.max(part.bbr * 0.5, sp * 0.06);
-        fluid.stamp(hp.x - b.velocity.x * 0.05, hp.y, hp.z - b.velocity.z * 0.05, yaw, len, part.bbr * 0.55, 0.16 * part.bloodWet);
+        fluid.stamp(_p.set(hp.x - b.velocity.x * 0.05, hp.y, hp.z - b.velocity.z * 0.05), hn, b.velocity, len, part.bbr * 0.55, 0.16 * part.bloodWet);
         if (!bleeding) part.bloodWet *= 1 - Math.min(0.5, sp * 0.06);
       }
     }
   }
 
+  printT -= dt;
+  if (printT <= 0) { printT = 0.05; prints(); }
+
   fluid.updateFluid(dt);
+}
+
+/*
+ * Contacts from the last physics step: a bloodied hand or limb pressed
+ * against something leaves blood on it. Hands print a palm with fingers;
+ * other parts a smear. On level floor only hands print here (bodies lying
+ * or sliding are handled by the smear pass above).
+ */
+let printT = 0;
+const _cp = new THREE.Vector3(), _cn = new THREE.Vector3(), _cd = new THREE.Vector3();
+function prints() {
+  for (const c of world.contacts) {
+    for (const [mine, other, r, sign] of [[c.bi, c.bj, c.ri, -1], [c.bj, c.bi, c.rj, 1]]) {
+      const part = mine.userData && mine.userData.part;
+      if (!part || !part.stains || part.def.foot) continue;
+      if (other.userData && other.userData.ragdoll) continue;
+      const wet = part.bloodWet || 0;
+      if (wet < 0.08) continue;
+      const now = performance.now();
+      if (now - (part.printAt || 0) < 450) continue;
+      // surface normal, pointing out of the thing touched toward the part
+      _cn.set(c.ni.x * sign, c.ni.y * sign, c.ni.z * sign);
+      _cp.set(mine.position.x + r.x, mine.position.y + r.y, mine.position.z + r.z);
+      const hand = !!part.def.hand;
+      if (fluid.accepts(other, _cn)) {
+        if (_cn.y > 0.9 && !hand) continue;
+        // the contact point is inside the part a little: put it on the surface
+        rf.set(_cp.x + _cn.x * 0.1, _cp.y + _cn.y * 0.1, _cp.z + _cn.z * 0.1);
+        rt.set(_cp.x - _cn.x * 0.1, _cp.y - _cn.y * 0.1, _cp.z - _cn.z * 0.1);
+        ray.reset();
+        if (!world.raycastClosest(rf, rt, RAY, ray) || ray.body !== other) continue;
+        _cp.set(ray.hitPointWorld.x, ray.hitPointWorld.y, ray.hitPointWorld.z);
+        _cn.set(ray.hitNormalWorld.x, ray.hitNormalWorld.y, ray.hitNormalWorld.z);
+        _cd.set(0, -1, 0).applyQuaternion(_q.set(mine.quaternion.x, mine.quaternion.y, mine.quaternion.z, mine.quaternion.w));
+        if (hand) fluid.stamp(_cp, _cn, _cd, 0.1, 0.055, 0.3 * wet, HAND);
+        else fluid.stamp(_cp, _cn, mine.velocity.lengthSquared() > 0.25 ? mine.velocity : _cd, part.bbr * 0.7, part.bbr * 0.5, 0.22 * wet);
+      } else {
+        splat(_cp, _cn, hand ? 0.12 : 0.1, 'drops', other);
+      }
+      part.printAt = now;
+      part.bloodWet = wet * 0.7;
+    }
+  }
+}
+
+// a hand print: palm, four fingers and a thumb (f along the hand toward the fingertips, s across)
+function HAND(f, s) {
+  const palm = 1 - ((f + 0.25) / 0.55) ** 2 - (s / 0.95) ** 2;
+  let fingers = 0;
+  for (const [x, l] of [[-0.6, 0.55], [-0.2, 0.68], [0.2, 0.65], [0.58, 0.5]]) {
+    const w = 1 - ((s - x) / 0.17) ** 2 - ((f - 0.3 - l / 2) / (l / 2)) ** 2;
+    fingers = Math.max(fingers, w);
+  }
+  const thumb = 1 - ((s + 1.0 - (f + 0.1) * 0.6) / 0.2) ** 2 - ((f + 0.05) / 0.35) ** 2;
+  return Math.max(palm, fingers, thumb) * (0.65 + Math.random() * 0.5);
 }

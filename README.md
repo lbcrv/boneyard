@@ -46,7 +46,7 @@ La física no simula 206 cuerpos rígidos; simula 16 segmentos y resuelve las fr
 | P-09 | Dojo | Combate cuerpo a cuerpo por oleadas, a lo Lugaru |
 | P-10 | Campo minado | 70 minas enterradas. Cronometrado |
 
-En Muro y Cruce eliges vehículo con `V` (carrito, descapotable, trineo cohete), arrancas con `Espacio` y giras con `A`/`D`. El muñeco va sujeto al asiento y sale despedido cuando el impacto supera lo que aguanta la sujeción.
+En Muro y Cruce eliges vehículo con `V` (carrito, descapotable, trineo cohete). `W` acelera, `S` frena y, ya parado, da marcha atrás, `A`/`D` giran y `Espacio` es el freno de mano. Los tres llevan suspensión de muelle y amortiguador: la carrocería se inclina en las curvas y cabecea al frenar. El trineo tiene aletas que lo mantienen derecho y le ayudan a girar. El muñeco va sujeto al asiento y sale despedido cuando el impacto supera lo que aguanta la sujeción.
 
 ## Combate
 
@@ -62,7 +62,7 @@ En Muro y Cruce eliges vehículo con `V` (carrito, descapotable, trineo cohete),
 
 Los golpes se fijan solos en el rival más cercano. Cada luchador tiene una barra de consciencia: los golpes en la cabeza la bajan entera, los del tronco menos y los de brazos y piernas casi nada. Se recupera de pie, y a cero cae inconsciente.
 
-Un balazo en la cabeza, un cuello cercenado o una explosión muy cerca lo matan: queda inerte hasta reaparecer. Si le arrancan una pierna o un pie, o tiene las dos piernas rotas o la columna partida, no puede levantarse, pero sigue despierto: con `WASD` se arrastra con los brazos. Sin un brazo no puede golpear con él. Si está agarrado a algo y tiran de él con violencia, se le arranca el brazo y la mano se queda agarrada.
+Un balazo en la cabeza, un cuello cercenado, una explosión muy cerca o perder demasiada sangre lo matan: queda inerte hasta reiniciar. Al morir el corazón para: las heridas dejan de bombear y solo rezuman un poco, y un miembro arrancado apenas gotea. Si le arrancan una pierna o un pie, o tiene las dos piernas rotas o la columna partida, no puede levantarse, pero sigue despierto: con `WASD` se arrastra con los brazos. Sin un brazo no puede golpear con él. Si está agarrado a algo y tiran de él con violencia, se le arranca el brazo y la mano se queda agarrada.
 
 ## Armas y herramientas
 
@@ -91,7 +91,7 @@ Un balazo en la cabeza, un cuello cercenado o una explosión muy cerca lo matan:
 | `E` | Mantener para agarrar con las manos (cajas, bordes) |
 | `Z` | Bailar: disco, robot, pollo, saludo. Moverse lo cancela |
 | `X` | Inerte: apaga todos los músculos |
-| `R` | Reaparecer |
+| `R` | Reiniciar el mapa entero: objetos, restos, sangre y vehículos |
 | Clic derecho | Arrastrar para girar la cámara |
 | Rueda | Zoom, o distancia de agarre mientras arrastras |
 | `T` | Cámara lenta (×0,3) |
@@ -103,7 +103,7 @@ Un balazo en la cabeza, un cuello cercenado o una explosión muy cerca lo matan:
 
 ## Ajustes
 
-- **Sangre:** desactivada por defecto. Con ella activada, los golpes dejan manchas, los balazos abren heridas que gotean y solo las heridas graves (cabeza, cuello, arteria, amputación) sueltan chorros. En el suelo la sangre es un líquido: las gotas se juntan, los charcos se extienden y se secan oscuros con el tiempo, pisarlos deja huellas y un cuerpo ensangrentado arrastrado deja rastro. En las paredes, las salpicaduras grandes escurren hacia abajo. Los golpes muy violentos pueden arrancar un miembro. Cada reaparición limpia la sangre. Se activa en el menú o con `B`, y el navegador recuerda la elección.
+- **Sangre:** desactivada por defecto. Con ella activada, los golpes dejan manchas, los balazos abren heridas que gotean y solo las heridas graves (cabeza, cuello, arteria, amputación) sueltan chorros. En el suelo, las paredes y las rampas la sangre es un líquido: las gotas se juntan, los charcos se extienden y se secan oscuros con el tiempo, y en las paredes escurre hacia abajo y gotea por el borde. Pisarla deja huellas, un cuerpo ensangrentado arrastrado deja rastro, y una mano o un miembro manchado deja su marca en lo que toca. Los golpes muy violentos pueden arrancar un miembro. Cada reaparición limpia la sangre. Se activa en el menú o con `B`, y el navegador recuerda la elección.
 - **Calidad:** en automático, si el juego va lento baja la resolución y la sombra.
 
 ## Rendimiento
@@ -146,6 +146,7 @@ src/moves.js      golpes por fotogramas clave, guardia, bloqueo y reacciones
 src/combat.js     IA de luchador y de sumo
 src/modes.js      reglas de sumo, dojo y pistas de choque
 src/vehicles.js   carrito, descapotable y trineo cohete
+src/carmodels.js  carrocerías por perfil: turismos, furgonetas, autobuses, camiones
 src/weapons.js    subfusil, bazuca, nuclear, minas
 src/blood.js      sangre opcional: heridas, chorros, salpicaduras, huellas
 src/bloodfluid.js la sangre del suelo como líquido simulado
