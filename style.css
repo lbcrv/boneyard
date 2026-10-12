@@ -204,6 +204,46 @@ html, body {
 .tool.active { background: var(--y); border-color: var(--y); transform: translateY(-6px); box-shadow: 0 10px 18px rgba(0, 0, 0, 0.5); }
 .tool.active .ico, .tool.active .nm, .tool.active .num { color: #0b0b0b; }
 
+/* tray groups: a label over each category, a coloured rule under it */
+.tray { align-items: flex-end; gap: 12px; padding: 6px 10px 8px; }
+.tgroup { display: flex; flex-direction: column; gap: 4px; }
+.tg-name { font-family: var(--f-tech); font-weight: 700; font-size: 9px; letter-spacing: 2px; color: #8d8a82; padding: 0 0 3px 2px; border-bottom: 2px solid var(--gc, #444); }
+.tg-tools { display: flex; gap: 6px; }
+.g-hand { --gc: #f4f2ec; }
+.g-gun { --gc: #ff5a4a; }
+.g-boom { --gc: #ff8a1f; }
+.g-throw { --gc: #5ab0ff; }
+.tg-hint { display: flex; flex-direction: column; align-items: center; gap: 4px; padding: 0 2px 6px; font-family: var(--f-tech); font-size: 9px; letter-spacing: 1.5px; color: #8d8a82; text-transform: uppercase; }
+.tg-hint .k { color: #0b0b0b; background: var(--y); border-color: var(--y); }
+
+/* the wheel */
+#wheel {
+  position: absolute; inset: 0; display: none; pointer-events: auto;
+  background: radial-gradient(circle at 50% 50%, rgba(0, 0, 0, 0.25), rgba(0, 0, 0, 0.7));
+  backdrop-filter: blur(3px) saturate(0.6);
+}
+#wheel.open { display: block; animation: wheel-in 0.14s ease-out; }
+@keyframes wheel-in { from { opacity: 0; } }
+.wh-disc { position: absolute; left: 50%; top: 50%; width: 520px; height: 520px; margin: -260px 0 0 -260px; animation: disc-in 0.18s cubic-bezier(.2, 1.4, .4, 1); }
+@keyframes disc-in { from { transform: scale(0.82) rotate(-8deg); } }
+.wh-ring { position: absolute; inset: 0; width: 100%; height: 100%; overflow: visible; }
+.wh-back { fill: rgba(8, 8, 8, 0.78); stroke: #1c1c1c; stroke-width: 2; }
+.wh-slice { fill: #151515; stroke: #262626; stroke-width: 1.5; cursor: pointer; transition: fill 0.1s; }
+.wh-slice.hot { fill: var(--y); stroke: var(--y); }
+.wh-rim { pointer-events: none; }
+.wh-rim.g-hand { fill: #f4f2ec; } .wh-rim.g-gun { fill: #ff5a4a; } .wh-rim.g-boom { fill: #ff8a1f; } .wh-rim.g-throw { fill: #5ab0ff; }
+.wh-item { position: absolute; transform: translate(-50%, -50%); display: flex; flex-direction: column; align-items: center; pointer-events: none; color: #b8b4aa; transition: transform 0.1s; }
+.wh-item.hot { color: #0b0b0b; transform: translate(-50%, -50%) scale(1.25); }
+.wh-ico { line-height: 0; }
+.wh-ico svg { width: 34px; height: 34px; }
+.wh-num { font-family: var(--f-tech); font-weight: 700; font-size: 10px; margin-top: 2px; opacity: 0.8; }
+.wh-center { position: absolute; left: 50%; top: 50%; width: 170px; transform: translate(-50%, -50%); text-align: center; pointer-events: none; }
+.wh-grp { font-family: var(--f-tech); font-weight: 700; font-size: 10px; letter-spacing: 3px; color: #8d8a82; }
+.wh-name { font-family: var(--f-poster); font-size: 34px; line-height: 1; color: var(--y); letter-spacing: 1px; margin: 4px 0 6px; text-transform: uppercase; }
+.wh-desc { font-family: var(--f-body); font-size: 13px; line-height: 1.3; color: #d9d6cd; }
+.wh-hint { position: absolute; left: 50%; top: calc(50% + 278px); transform: translateX(-50%); font-family: var(--f-tech); font-size: 12px; letter-spacing: 1.5px; color: #d9d6cd; white-space: nowrap; }
+.wh-hint .k { color: #0b0b0b; background: var(--y); border-color: var(--y); margin: 0 4px 0 10px; }
+
 /* controls */
 .protocol {
   position: absolute; bottom: 16px; left: 16px; padding: 0 0 12px;
@@ -426,6 +466,9 @@ html, body {
   #help { display: none; }
   .tool { width: 44px; height: 48px; }
   .tool .nm { display: none; }
+  .tg-name, .tg-hint { display: none; }
+  .tgroup .tg-tools { gap: 4px; }
+  .wh-disc { transform: scale(0.68); }
   .tray { gap: 4px; padding: 6px; max-width: calc(100% - 16px); overflow-x: auto; scrollbar-width: none; }
   .tool { flex: none; }
   #banner { font-size: 44px; }

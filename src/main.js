@@ -14,6 +14,7 @@ import { AIController } from './combat.js';
 import { createMode } from './modes.js';
 import { ICONS } from './icons.js';
 import { initVitals, updateVitals } from './hud.js';
+import { createWheel } from './wheel.js';
 
 // ------------------------------------------------------------------ renderer / scene
 const app = document.getElementById('app');
@@ -91,17 +92,24 @@ let emoteIdx = -1;
 const recentBones = [];
 
 const TOOLS = [
-  { id: 'grab', nm: 'Agarrar' },
-  { id: 'smg', nm: 'Subfusil' },
-  { id: 'bazooka', nm: 'Bazuca' },
-  { id: 'nuke', nm: 'Nuclear' },
-  { id: 'mine', nm: 'Mina' },
-  { id: 'bomb', nm: 'Bomba' },
-  { id: 'cannon', nm: 'Cañón' },
-  { id: 'crate', nm: 'Caja' },
-  { id: 'barrel', nm: 'Barril' },
-  { id: 'truck', nm: 'Camión' },
+  { id: 'grab', nm: 'Agarrar', desc: 'Atrapa lo que sea con el ratón y lánzalo.' },
+  { id: 'smg', nm: 'Subfusil', desc: 'Ráfaga mientras mantienes el clic.' },
+  { id: 'bazooka', nm: 'Bazuca', desc: 'Un cohete que estalla al tocar algo.' },
+  { id: 'nuke', nm: 'Nuclear', desc: 'Cuenta atrás, destello y nube de hongo.' },
+  { id: 'mine', nm: 'Mina', desc: 'Se arma en el suelo y estalla al pisarla.' },
+  { id: 'bomb', nm: 'Bomba', desc: 'Una bomba con mecha donde apuntes.' },
+  { id: 'cannon', nm: 'Cañón', desc: 'Bala de hierro desde la cámara.' },
+  { id: 'crate', nm: 'Caja', desc: 'Una caja de madera cae del cielo.' },
+  { id: 'barrel', nm: 'Barril', desc: 'Barril explosivo: dispárale y verás.' },
+  { id: 'truck', nm: 'Camión', desc: 'Un camión disparado como el cañón.' },
 ];
+// categories for the tray and the wheel
+const TOOL_GROUPS = {
+  grab: { key: 'hand', name: 'MANOS' },
+  smg: { key: 'gun', name: 'ARMAS' }, bazooka: { key: 'gun', name: 'ARMAS' }, nuke: { key: 'gun', name: 'ARMAS' },
+  mine: { key: 'boom', name: 'EXPLOSIVOS' }, bomb: { key: 'boom', name: 'EXPLOSIVOS' },
+  cannon: { key: 'throw', name: 'LANZAR' }, crate: { key: 'throw', name: 'LANZAR' }, barrel: { key: 'throw', name: 'LANZAR' }, truck: { key: 'throw', name: 'LANZAR' },
+};
 const EMOTES = [['disco', 'BAILE DISCO'], ['robot', 'ROBOT'], ['pollo', 'BAILE DEL POLLO'], ['saludo', 'SALUDO']];
 
 function store(key, val) { try { localStorage.setItem('boneyard.' + key, String(val)); } catch { /* ignore */ } }
@@ -210,6 +218,7 @@ let rmbDown = false;
 let lastMouse = { x: 0, y: 0 };
 
 window.addEventListener('keydown', (e) => {
+  if (wheel && wheel.isOpen() && e.code === 'Escape') { wheel.close(false); return; }
   if (e.code === 'Escape') { toggleMenu(); return; }
   if (!menu.classList.contains('hidden')) {
     if (e.code === 'ArrowRight' || e.code === 'ArrowDown') { e.preventDefault(); pickMap(menuSel + 1, true); }
@@ -221,6 +230,7 @@ window.addEventListener('keydown', (e) => {
   if (['Space', 'Backspace', 'Tab'].includes(e.code)) e.preventDefault();
   if (e.repeat && !['KeyW', 'KeyA', 'KeyS', 'KeyD', 'KeyC', 'KeyE'].includes(e.code)) return;
   keys.add(e.code);
+  if (e.code === 'Tab' && wheel) { wheel.open(); keys.clear(); return; }
   switch (e.code) {
     case 'Space': pending.jump = true; break;
     case 'KeyQ': pending.dive = true; break;
@@ -257,8 +267,12 @@ window.addEventListener('keydown', (e) => {
     }
   }
 });
-window.addEventListener('keyup', (e) => keys.delete(e.code));
-window.addEventListener('blur', () => { keys.clear(); lmbDown = false; });
+window.addEventListener('keyup', (e) => {
+  keys.delete(e.code);
+  if (e.code === 'Tab' && wheel) wheel.close(true);
+});
+window.addEventListener('pointermove', (e) => { if (wheel) wheel.point(e.clientX, e.clientY); });
+window.addEventListener('blur', () => { keys.clear(); lmbDown = false; if (wheel) wheel.close(false); });
 
 const canvas = renderer.domElement;
 canvas.addEventListener('contextmenu', (e) => e.preventDefault());
@@ -961,16 +975,31 @@ function toggleMenu() {
   }
 }
 
+let wheel = null;
 function buildToolbar() {
   const bar = document.getElementById('toolbar');
+  let group = null, box = null;
   TOOLS.forEach((t, i) => {
+    const g = TOOL_GROUPS[t.id];
+    if (g !== group && (!group || g.key !== group.key)) {
+      group = g;
+      box = document.createElement('div');
+      box.className = 'tgroup g-' + g.key;
+      box.innerHTML = `<span class="tg-name">${g.name}</span><div class="tg-tools"></div>`;
+      bar.appendChild(box);
+    }
     const el = document.createElement('div');
     el.className = 'tool' + (i === tool ? ' active' : '');
     el.innerHTML = `<span class="num">${(i + 1) % 10}</span><span class="ico">${ICONS[t.id]}</span><span class="nm">${t.nm}</span>`;
     el.title = `${t.nm} (${(i + 1) % 10})`;
     el.addEventListener('pointerdown', (e) => { e.stopPropagation(); selectTool(i); });
-    bar.appendChild(el);
+    box.querySelector('.tg-tools').appendChild(el);
   });
+  const hint = document.createElement('div');
+  hint.className = 'tg-hint';
+  hint.innerHTML = '<span class="k">Tab</span><span>rueda</span>';
+  bar.appendChild(hint);
+  wheel = createWheel({ tools: TOOLS, icons: ICONS, groups: TOOL_GROUPS, current: () => tool, onPick: (i) => selectTool(i) });
 }
 
 // ------------------------------------------------------------------ performance guard
@@ -1009,7 +1038,7 @@ function tick(dt, render = true) {
   perfGuard(dt);
 
   if (hitStop > 0) hitStop -= dt;
-  const targetScale = hitStop > 0 ? 0.22 : slowmo ? 0.3 : 1;
+  const targetScale = hitStop > 0 ? 0.22 : wheel && wheel.isOpen() ? 0.12 : slowmo ? 0.3 : 1;
   timeScale += (targetScale - timeScale) * Math.min(1, dt * (hitStop > 0 ? 30 : 5));
 
   if (freeze > 0) { freeze -= dt; acc = 0; }

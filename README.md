@@ -66,7 +66,7 @@ Un balazo en la cabeza, un cuello cercenado, una explosión muy cerca o perder d
 
 ## Armas y herramientas
 
-`1`–`0` eligen herramienta; clic izquierdo la usa.
+`1`–`0` eligen herramienta; clic izquierdo la usa. Mantén `Tab` para abrir la rueda de herramientas (el tiempo se ralentiza), apunta con el ratón y suelta para equipar.
 
 | Tecla | Herramienta |
 |---|---|
