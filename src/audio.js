@@ -225,6 +225,32 @@ export function gun() {
   o.start(t); o.stop(t + 0.08);
 }
 
+let lastPunch = 0;
+/** Fist or shin landing: a dry slap over a short low thump. */
+export function punch(v = 5, blocked = false) {
+  if (!ctx) return;
+  const t = ctx.currentTime;
+  if (t - lastPunch < 0.04) return;
+  lastPunch = t;
+  const k = Math.min(1, v / 8);
+  const n = noise(t, 0.08);
+  const f = ctx.createBiquadFilter();
+  f.type = 'bandpass'; f.frequency.value = blocked ? 1800 : 2600; f.Q.value = 1.1;
+  const g = ctx.createGain();
+  env(g, t, 0.35 + k * 0.35, 0.001, blocked ? 0.04 : 0.06);
+  n.connect(f).connect(g).connect(master);
+  if (!blocked) {
+    const o = ctx.createOscillator();
+    o.type = 'sine';
+    o.frequency.setValueAtTime(140, t);
+    o.frequency.exponentialRampToValueAtTime(55, t + 0.09);
+    const og = ctx.createGain();
+    env(og, t, 0.35 + k * 0.4, 0.002, 0.1);
+    o.connect(og).connect(master);
+    o.start(t); o.stop(t + 0.14);
+  }
+}
+
 export function rocket() {
   if (!ctx) return;
   const t = ctx.currentTime;

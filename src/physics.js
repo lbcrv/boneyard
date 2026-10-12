@@ -31,6 +31,8 @@ export const MAT = {
   bouncy: new CANNON.Material('bouncy'),
   ice: new CANNON.Material('ice'),
   vehicle: new CANNON.Material('vehicle'),
+  // a body being dragged along by its own arms (crawling): slides, hands still grip
+  crawl: new CANNON.Material('crawl'),
 };
 
 world.defaultContactMaterial.friction = 0.5;
@@ -51,6 +53,12 @@ cm(MAT.prop, MAT.ice, 0.02, 0.05);
 cm(MAT.vehicle, MAT.ground, 0.06, 0.05);
 cm(MAT.vehicle, MAT.ragdoll, 0.5, 0.15);
 cm(MAT.vehicle, MAT.prop, 0.4, 0.15);
+cm(MAT.crawl, MAT.ground, 0.22, 0.05);
+cm(MAT.crawl, MAT.prop, 0.25, 0.05);
+cm(MAT.crawl, MAT.ragdoll, 0.3, 0.05);
+cm(MAT.crawl, MAT.ice, 0.02, 0.05);
+cm(MAT.crawl, MAT.bouncy, 0.5, 0.9);
+cm(MAT.crawl, MAT.vehicle, 0.4, 0.1);
 
 // ---- Small math helpers shared across modules ----
 export const _v = new CANNON.Vec3();

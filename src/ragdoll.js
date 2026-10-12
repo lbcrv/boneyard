@@ -6,7 +6,8 @@ import {
 } from './physics.js';
 import { headTexture, torsoTexture } from './textures.js';
 import { Skeleton, BONE_COUNT } from './skeleton.js';
-import { makeStainable } from './blood.js';
+import { makeStainable, isBloodOn } from './blood.js';
+import { CLIPS, CHAINS, GUARD, BLOCK, REACTIONS, sampleClip, clipDrop, clipSpin } from './moves.js';
 
 /*
  * Active ragdoll, v2.
@@ -76,16 +77,6 @@ function jointDefs() {
   return defs;
 }
 
-// Lugaru-style move set. Times in seconds. power = velocity (m/s) the strike adds.
-const MOVES = {
-  punch: { wind: 0.09, strike: 0.13, rec: 0.16, high: true, power: 7.5, limbs: ['hand'], dmg: 1 },
-  kick: { wind: 0.13, strike: 0.16, rec: 0.24, high: true, power: 10, limbs: ['foot', 'shin'], dmg: 1.35 },
-  sweep: { wind: 0.1, strike: 0.2, rec: 0.26, high: false, power: 7, limbs: ['foot', 'shin'], dmg: 0.7, sweep: true },
-  flykick: { wind: 0.06, strike: 0.3, rec: 0.2, high: true, power: 12, limbs: ['foot', 'shin'], dmg: 1.6 },
-  shove: { wind: 0.14, strike: 0.14, rec: 0.26, high: true, power: 6.5, limbs: ['hand', 'lowerArm'], dmg: 0.4, both: true },
-  reversal: { wind: 0, strike: 0.25, rec: 0.35, high: true, power: 0, limbs: [], dmg: 0 },
-};
-
 // scratch
 const qp = new THREE.Quaternion();
 const qc = new THREE.Quaternion();
@@ -108,8 +99,8 @@ const BRUISE = new THREE.Color(0x5b2a3a);
 
 export const STATE_LABEL = {
   stand: 'DE PIE', stumble: 'INESTABLE', fall: 'CAYENDO', down: 'EN EL SUELO',
-  ko: 'INCONSCIENTE', getup: 'INCORPORÁNDOSE', limp: 'INERTE', air: 'EN EL AIRE',
-  wrecked: 'NO PUEDE LEVANTARSE', seated: 'SENTADO', crouch: 'AGACHADO', attack: 'ATACANDO', emote: 'BAILANDO',
+  ko: 'INCONSCIENTE', dead: 'MUERTO', crawl: 'ARRASTRÁNDOSE', getup: 'INCORPORÁNDOSE', limp: 'INERTE', air: 'EN EL AIRE',
+  wrecked: 'NO PUEDE LEVANTARSE', seated: 'SENTADO', crouch: 'AGACHADO', attack: 'ATACANDO', emote: 'BAILANDO', block: 'BLOQUEANDO',
 };
 
 function groundHit(x, z, yTop, yBot) {
@@ -148,7 +139,7 @@ export class Ragdoll {
     this.skeleton = new Skeleton();
     this.feet = { L: null, R: null };
     this.plants = { L: null, R: null };
-    this.tune = { upright: 1, runBlend: 0.32, runLead: 0.42, lean: 0.03, hipReaction: 1, trunkGain: 6 };
+    this.tune = { upright: 1, runBlend: 0.6, runLead: 0.42, lean: 0.03, hipReaction: 1, trunkGain: 6, legSwing: 2 };
     this.pendingHits = [];
     this.pendingGrips = [];
     this.build();
@@ -318,7 +309,10 @@ export class Ragdoll {
       if (p.stains) { p.stains.length = 0; p.stainU.uBloodN.value = 0; p.bleedT = 0; }
       p.mat.color.copy(p.baseColor);
     }
-    for (const j of this.joints) { j.broken = false; j.weak = 1; j.target.identity(); j.prevTarget.identity(); }
+    for (const j of this.joints) {
+      if (j.severed) { world.addConstraint(j.constraint); j.severed = false; }
+      j.broken = false; j.weak = 1; j.target.identity(); j.prevTarget.identity();
+    }
     this.releaseGrip('L'); this.releaseGrip('R');
     this.skeleton.reset();
     Object.assign(this, {
@@ -327,7 +321,7 @@ export class Ragdoll {
       groundY: pos.y, groundRate: 0, trip: 0, hitCd: 0, grabHeld: false, crouching: false,
       act: null, actCd: 0, punchSide: 1, hp: 100, paralysed: false, burnt: 0, seat: null,
       lastSwing: 'R', swingSide: null, sinceStep: 0, groundRef: pos.y, maskRestoreT: 0,
-      lastHitBy: null, comboTaken: 0, emote: null, emoteT: 0,
+      lastHitBy: null, dead: false, crawling: false, crawlT: 0, comboTaken: 0, emote: null, emoteT: 0, queued: null, chainKind: null, chainIdx: 0, lastMoveEnd: -9, react: null, blocking: false, combatTarget: null, lastBlocked: false,
     });
     this.events.length = 0;
     this.pendingHits.length = 0;
@@ -360,12 +354,15 @@ export class Ragdoll {
     if (this.state === 'stand') {
       if (this.emote) return 'emote';
       if (this.act && this.act.type !== 'reversal') return 'attack';
+      if (this.blocking) return 'block';
       if (this.crouching) return 'crouch';
       if (!this.grounded && this.airT > 0.15) return 'air';
       return this.stumble > 0.25 ? 'stumble' : 'stand';
     }
+    if (this.dead) return 'dead';
     if (this.state === 'fall') {
       if (this.koT > 0 || this.hp <= 0) return 'ko';
+      if (this.crawling) return 'crawl';
       if (this.cannotStand()) return 'wrecked';
       return this.nearGround && this.restT > 0.2 ? 'down' : 'fall';
     }
@@ -373,11 +370,12 @@ export class Ragdoll {
   }
 
   legFailed(S) {
+    if (this.jointMap['hip' + S].severed || this.jointMap['knee' + S].severed) return true;
     return this.skeleton.segmentFailed('thigh' + S) || this.skeleton.segmentFailed('shin' + S);
   }
 
   cannotStand() {
-    if (this.paralysed) return true;
+    if (this.paralysed || this.dead) return true;
     if (this.skeleton.segmentFailed('pelvis')) return true;
     return this.legFailed('L') && this.legFailed('R');
   }
@@ -454,10 +452,21 @@ export class Ragdoll {
     if (h.otherRag) this.lastHitBy = h.otherRag;
     if (h.attacker) this.lastHitBy = h.attacker;
 
-    const pts = Math.round(Math.pow(Math.max(0, v - 2.5), 1.7) * 4 * part.def.mult);
-    part.hurt = Math.min(1, part.hurt + v / 14);
-    const dmg = Math.pow(Math.max(0, v - 2.5), 1.25) * 1.3 * part.def.mult * (h.dmgMul || 1);
+    const strike = h.kind && CLIPS[h.kind] && standing;
+    const taken = strike ? this.takeStrike(h) : 1;
+    const pts = Math.round(Math.pow(Math.max(0, v - 2.5), 1.7) * 4 * part.def.mult * taken);
+    part.hurt = Math.min(1, part.hurt + v / 14 * taken);
+    // strikes do a fixed amount by move (jab ~8, hook ~13, roundhouse ~17); anything else by impact speed
+    // hp is consciousness: the head takes it all, the trunk some, a limb
+    // hurts but does not put anyone to sleep
+    const isHeadHit = part.name === 'head';
+    const trunk = part.name === 'chest' || part.name === 'abdomen' || part.name === 'pelvis';
+    const region = isHeadHit ? 1 : trunk ? 0.45 : 0.15;
+    const dmg = strike ? 9.5 * (h.dmgMul || 1) * (isHeadHit ? 1.35 : 1) * taken
+      : Math.pow(Math.max(0, v - 2.5), 1.25) * 1.3 * part.def.mult * (h.dmgMul || 1) * taken * region;
     this.hp -= dmg;
+    // only a blow to the head (or a beating in a fight) knocks him out
+    if (this.hp <= 0 && !isHeadHit && !strike && h.kind !== 'bullet') this.hp = Math.max(this.hp, 4);
 
     // fractures
     let broken = [];
@@ -469,17 +478,35 @@ export class Ragdoll {
     this.events.push({ type: 'hit', part, v, point, pts, rag: this, broken, focus: h.focus || 1, kind: h.kind, attacker: h.attacker });
 
     const isHead = part.name === 'head';
-    if (standing && this.state !== 'seated') {
+    // extreme blunt impacts tear the limb off at the joint above the hit
+    const j = part.joint;
+    if (j && !h.kind && v > (j.name === 'neck' ? 30 : 24) && /^(shoulder|elbow|wrist|hip|knee|ankle|neck)/.test(j.name) && Math.random() < 0.55) {
+      this.sever(j, point);
+    }
+    if (standing && this.state !== 'seated' && !strike) {
       const knock = h.kind === 'bullet' ? (isHead ? 0 : 99) : isHead ? 5 : 7.5;
       if (v > knock) this.goFall(isHead ? 'head' : 'impact');
       else if (v > 3.2) this.stumble = Math.min(1, this.stumble + (v - 2.5) / 5);
     }
-    if (isHead && v > 13 && this.koT <= 0) { this.koT = 5; this.events.push({ type: 'ko', point, rag: this }); this.goFall('ko'); }
+    // a bullet through the skull, or damage far past zero, is final
+    if ((h.kind === 'bullet' && isHead) || this.hp < -60) { this.kill(point); return; }
+    if (isHead && v > 15 && this.koT <= 0) { this.koT = 3.5; this.events.push({ type: 'ko', point, rag: this }); this.goFall('ko'); }
     if (this.hp <= 0 && this.koT < 3) {
-      this.koT = 8;
+      this.koT = 6;
       this.events.push({ type: 'ko', point, rag: this, by: this.lastHitBy });
       this.goFall('ko');
     }
+  }
+
+  /** Dead for good: no muscle tone, never gets up again until a respawn. */
+  kill(point, quiet = false) {
+    if (this.dead) return;
+    this.dead = true;
+    this.hp = -999;
+    this.koT = 1e9;
+    this.act = null; this.queued = null; this.emote = null; this.react = null;
+    if (this.state !== 'fall') this.goFall('dead');
+    this.events.push({ type: 'death', point: point || new THREE.Vector3().copy(this.head.position), rag: this, by: this.lastHitBy, quiet });
   }
 
   applyFractures() {
@@ -490,24 +517,44 @@ export class Ragdoll {
       // a broken bone above the joint also weakens it
       j.weak = sk.segmentFailed(j.P.name) && j.P.name !== 'pelvis' && j.P.name !== 'chest' ? 0.25 : 1;
     }
-    if (sk.has('cervical') && this.koT < 4) { this.koT = 6; this.jointMap.neck.broken = true; }
-    if (sk.has('lumbar') || sk.has('spine')) {
-      const thoracic = sk.has('spine');
-      this.paralysed = sk.has('lumbar') || thoracic;
-    }
+    if (sk.has('cervical') && this.koT < 3) { this.koT = 3; this.jointMap.neck.broken = true; }
+    if (sk.countKind('lumbar') >= 2 || sk.countKind('spine') >= 3) this.paralysed = true;
     if (this.paralysed) for (const n of ['hipL', 'hipR', 'kneeL', 'kneeR', 'ankleL', 'ankleR']) this.jointMap[n].broken = true;
     if (this.cannotStand()) this.goFall('legs');
   }
 
   /** Blunt trauma across the body (explosions): breaks random bones. */
+  /** Amputation: the joint lets go and everything below it goes limp. */
+  sever(j, point) {
+    if (j.severed || !isBloodOn()) return false;
+    world.removeConstraint(j.constraint);
+    j.severed = true;
+    j.broken = true;
+    for (const jj of this.joints) {
+      let p = jj.C;
+      while (p) { if (p === j.C) { jj.broken = true; break; } p = p.joint ? p.joint.P : null; }
+    }
+    if (j.name === 'neck') this.kill(point, true);
+    this.events.push({ type: 'sever', joint: j, part: j.C, point: point || new THREE.Vector3().copy(j.C.body.position), rag: this });
+    if (this.state !== 'fall') this.goFall('sever');
+    return true;
+  }
+
   blastTrauma(intensity) {
+    // a blast right on top of him can tear limbs off
+    if (intensity > 0.75 && isBloodOn()) {
+      const limbs = ['shoulderL', 'shoulderR', 'elbowL', 'elbowR', 'hipL', 'hipR', 'kneeL', 'kneeR'];
+      const n = intensity > 0.92 ? 2 : 1;
+      for (let i = 0; i < n; i++) this.sever(this.jointMap[limbs[(Math.random() * limbs.length) | 0]]);
+    }
     const b = this.skeleton.blast(intensity);
     if (b.length) {
       this.applyFractures();
       this.events.push({ type: 'blast', broken: b, rag: this, point: new THREE.Vector3().copy(this.chest.position) });
     }
     this.hp -= intensity * 70;
-    if (this.hp <= 0 && this.koT < 3) { this.koT = 8; this.events.push({ type: 'ko', point: new THREE.Vector3().copy(this.head.position), rag: this }); }
+    if (this.hp < -60) this.kill(new THREE.Vector3().copy(this.head.position));
+    else if (this.hp <= 0 && this.koT < 3) { this.koT = 8; this.events.push({ type: 'ko', point: new THREE.Vector3().copy(this.head.position), rag: this }); }
   }
 
   goFall(reason = '') {
@@ -596,40 +643,54 @@ export class Ragdoll {
   }
 
   // ---------------------------------------------------------------- combat
-  startMove(type, input) {
-    if (this.state !== 'stand' || this.act || this.actCd > 0) return;
-    // reversal: catch an enemy's attack while it is still winding up
+  /*
+   * kind: 'punch' | 'kick' | 'sweep' | 'shove'. Pressing again late in a move
+   * queues the next one in the chain (jab -> cross -> hook -> uppercut,
+   * front kick -> roundhouse). A press while an enemy winds up is a reversal.
+   */
+  startMove(kind, input) {
+    if (this.state !== 'stand') return;
+    if (this.act) {
+      const c = this.act.clip;
+      if (this.act.type !== 'reversal' && this.act.t > c.hit[1] - 0.05) this.queued = kind;
+      return;
+    }
+    if (this.actCd > 0) return;
     for (const e of this.enemies()) {
-      if (!e.act || e.state !== 'stand' || e.act.type === 'reversal') continue;
-      const def = MOVES[e.act.type];
-      if (e.act.t > def.wind + 0.05) continue;
+      if (!e.act || e.state !== 'stand' || e.act.type === 'reversal' || !e.act.clip.limb) continue;
+      if (e.act.t > e.act.clip.hit[0] + 0.03) continue;
       const dx = e.pelvis.position.x - this.pelvis.position.x, dz = e.pelvis.position.z - this.pelvis.position.z;
       if (dx * dx + dz * dz > 2.3 * 2.3) continue;
       this.reversal(e);
       return;
     }
-    if (type === 'kick' && !this.grounded && this.airT > 0.04) type = 'flykick';
-    if (type === 'kick' && this.crouching) type = 'sweep';
-    const target = input.target || this.nearestEnemy(4.5);
-    if (target) {
-      this.yawTarget = Math.atan2(target.pelvis.position.x - this.pelvis.position.x, target.pelvis.position.z - this.pelvis.position.z);
-    } else if (input.camYaw !== undefined && this.isPlayer) this.yawTarget = input.camYaw;
-    if (type === 'punch') this.punchSide = -this.punchSide;
-    this.act = { type, t: 0, hit: new Set(), side: type === 'punch' ? (this.punchSide > 0 ? 'L' : 'R') : 'R' };
-    {
-      // every strike steps into the target a little
-      const fx = Math.sin(this.yawTarget), fz = Math.cos(this.yawTarget);
-      const lunge = { punch: 1.6, kick: 1.0, sweep: 0.6, shove: 2.2, flykick: 3 }[type] || 0;
-      this.addVelocity(fx * lunge, type === 'flykick' ? 1.5 : 0, fz * lunge);
+    const target = (input && input.target) || this.nearestEnemy(4.5);
+    const dist = target ? Math.hypot(target.pelvis.position.x - this.pelvis.position.x, target.pelvis.position.z - this.pelvis.position.z) : 9;
+    let name;
+    if (kind === 'shove') name = 'shove';
+    else if (kind === 'sweep' || (kind === 'kick' && (this.blocking || this.crouching))) name = 'sweep';
+    else if (kind === 'kick' && !this.grounded && this.airT > 0.1) name = 'flykick';
+    else if (kind === 'kick' && dist < 0.85) name = 'knee';
+    else {
+      const chain = CHAINS[kind] || CHAINS.punch;
+      const cont = this.chainKind === kind && this.time - this.lastMoveEnd < 0.45;
+      this.chainIdx = cont ? (this.chainIdx + 1) % chain.length : 0;
+      name = chain[this.chainIdx];
     }
-    this.events.push({ type: 'swing', move: type, rag: this });
+    this.chainKind = kind;
+    if (target) this.yawTarget = Math.atan2(target.pelvis.position.x - this.pelvis.position.x, target.pelvis.position.z - this.pelvis.position.z);
+    else if (input && input.camYaw !== undefined && this.isPlayer) this.yawTarget = input.camYaw;
+    this.act = { type: name, clip: CLIPS[name], t: 0, hit: new Set(), lunged: new Set(), aim: null };
+    this.queued = null;
+    this.events.push({ type: 'swing', move: name, rag: this });
   }
 
   reversal(enemy) {
-    this.act = { type: 'reversal', t: 0, hit: new Set(), side: 'L' };
+    this.act = { type: 'reversal', clip: CLIPS.reversal, t: 0, hit: new Set(), lunged: new Set(), aim: null };
     this.yawTarget = Math.atan2(enemy.pelvis.position.x - this.pelvis.position.x, enemy.pelvis.position.z - this.pelvis.position.z);
     const fx = Math.sin(this.yawTarget), fz = Math.cos(this.yawTarget);
     enemy.act = null;
+    enemy.queued = null;
     enemy.actCd = 0.8;
     enemy.goFall('reversal');
     enemy.lastHitBy = this;
@@ -647,6 +708,7 @@ export class Ragdoll {
   nearestEnemy(maxDist) {
     let best = null, bd = maxDist * maxDist;
     for (const e of this.enemies()) {
+      if (e.out) continue;
       const dx = e.pelvis.position.x - this.pelvis.position.x, dz = e.pelvis.position.z - this.pelvis.position.z;
       const d = dx * dx + dz * dz;
       if (d < bd) { bd = d; best = e; }
@@ -654,74 +716,106 @@ export class Ragdoll {
     return best;
   }
 
-  /** During the strike window: land hits on nearby enemy parts. */
+  /** During the hit window: steer the striking limb onto its target and land the hit. */
   strikeAssist() {
     const a = this.act;
-    const def = MOVES[a.type];
-    const sides = def.both ? ['L', 'R'] : [a.side];
-    // home the striking limb on a body part of the nearest enemy in front
+    const c = a.clip;
+    const limbs = c.both ? ['handL', 'handR'] : [c.limb];
     if (!a.aim) {
-      const e = this.nearestEnemy(1.9);
-      if (e && !a.hit.has(e)) {
-        const want = def.sweep ? ['shinL', 'shinR'] : a.type === 'punch' ? (Math.random() < 0.45 ? ['head'] : ['chest']) : ['chest', 'abdomen'];
-        a.aim = { e, part: e.partMap[want[(Math.random() * want.length) | 0]] };
-      } else a.aim = { e: null };
+      const e = this.nearestEnemy(2.0);
+      a.aim = e ? { e, part: e.partMap[c.aim[(Math.random() * c.aim.length) | 0]] } : { e: null };
     }
-    if (a.aim.e && !a.hit.has(a.aim.e)) {
+    const aimE = a.aim.e;
+    if (aimE && !a.hit.has(aimE)) {
       const tp = a.aim.part.body.position;
-      for (const S of sides) {
-        const lb = this.partMap[def.limbs[0] + S].body;
+      for (const ln of limbs) {
+        const lb = this.partMap[ln].body;
         const dx = tp.x - lb.position.x, dy = tp.y - lb.position.y, dz = tp.z - lb.position.z;
         const d = Math.hypot(dx, dy, dz) || 1;
-        if (d > 1.6) continue;
-        const sp = def.power * 1.1;
-        lb.velocity.x += (dx / d * sp - lb.velocity.x) * 0.3;
-        lb.velocity.y += (dy / d * sp - lb.velocity.y) * 0.3;
-        lb.velocity.z += (dz / d * sp - lb.velocity.z) * 0.3;
+        if (d > 1.7) continue;
+        const sp = c.power * 1.6;
+        lb.velocity.x += (dx / d * sp - lb.velocity.x) * 0.35;
+        lb.velocity.y += (dy / d * sp - lb.velocity.y) * 0.35;
+        lb.velocity.z += (dz / d * sp - lb.velocity.z) * 0.35;
       }
     }
-    for (const S of sides) {
-      for (const limb of def.limbs) {
-        const sp = this.partMap[limb + S];
-        if (!sp) continue;
-        const p = sp.body.position;
-        for (const e of this.enemies()) {
-          if (a.hit.has(e)) continue;
-          if (def.high && e.crouching && e.state === 'stand') continue; // ducked under it
-          for (const ep of e.parts) {
-            if (!def.sweep && ep.def.foot) continue;
-            if (def.sweep && !(ep.def.foot || ep.name.startsWith('shin'))) continue;
-            const q = ep.body.position;
+    for (const ln of limbs) {
+      const sp = this.partMap[ln];
+      const sp2 = sp.joint ? sp.joint.P : null; // forearm / shin behind the fist / foot
+      for (const e of this.enemies()) {
+        if (a.hit.has(e)) continue;
+        if (c.high && e.crouching && e.state === 'stand') continue;
+        for (const ep of e.parts) {
+          if (!c.sweep && ep.def.foot) continue;
+          if (c.sweep && !(ep.def.foot || ep.name.startsWith('shin'))) continue;
+          let near = null;
+          for (const s of [sp, sp2]) {
+            if (!s) continue;
+            const p = s.body.position, q = ep.body.position;
+            const reach = s.bbr + ep.bbr + 0.14;
             const dx = q.x - p.x, dy = q.y - p.y, dz = q.z - p.z;
-            const reach = sp.bbr + ep.bbr + 0.18;
-            if (dx * dx + dy * dy + dz * dz > reach * reach) continue;
-            a.hit.add(e);
-            const fx = Math.sin(this.yawTarget), fz = Math.cos(this.yawTarget);
-            const pw = def.power;
-            if (def.sweep) {
-              // take the legs out from under him
-              for (const lp of e.parts) {
-                const low = lp.def.foot || lp.name.startsWith('shin') || lp.name.startsWith('thigh');
-                lp.body.velocity.x += fx * (low ? pw : -1.5);
-                lp.body.velocity.z += fz * (low ? pw : -1.5);
-                if (low) lp.body.velocity.y += 3;
-              }
-              e.goFall('sweep');
-            } else {
-              ep.body.velocity.x += fx * pw; ep.body.velocity.z += fz * pw; ep.body.velocity.y += pw * 0.15;
-              const share = def.both ? 0.45 : 0.22;
-              for (const lp of e.parts) { lp.body.velocity.x += fx * pw * share; lp.body.velocity.z += fz * pw * share; }
-            }
-            const point = new THREE.Vector3((p.x + q.x) / 2, (p.y + q.y) / 2, (p.z + q.z) / 2);
-            const rel = pw + Math.hypot(sp.body.velocity.x, sp.body.velocity.z) * 0.3;
-            e.receiveHit({ part: ep, v: rel, point, focus: 1.2, attacker: this, kind: a.type, dmgMul: def.dmg });
-            if (def.both) e.stumble = Math.min(1, e.stumble + 0.4);
-            this.events.push({ type: 'strike', move: a.type, rag: this, victim: e, point, v: rel });
-            break;
+            if (dx * dx + dy * dy + dz * dz < reach * reach) { near = s; break; }
           }
+          if (!near) continue;
+          a.hit.add(e);
+          this.landHit(e, ep, near);
+          break;
         }
       }
     }
+  }
+
+  landHit(e, ep, striker) {
+    const c = this.act.clip;
+    const p = striker.body.position, q = ep.body.position;
+    let dx = q.x - p.x, dz = q.z - p.z;
+    const dl = Math.hypot(dx, dz) || 1;
+    dx /= dl; dz /= dl;
+    const pw = c.power;
+    const point = new THREE.Vector3((p.x + q.x) / 2, (p.y + q.y) / 2, (p.z + q.z) / 2);
+    if (c.sweep) {
+      for (const lp of e.parts) {
+        const low = lp.def.foot || lp.name.startsWith('shin') || lp.name.startsWith('thigh');
+        lp.body.velocity.x += dx * (low ? pw : -1.2);
+        lp.body.velocity.z += dz * (low ? pw : -1.2);
+        if (low) lp.body.velocity.y += 2.5;
+      }
+      e.goFall('sweep');
+    } else {
+      // the struck part takes most of it; the body rocks back a little
+      ep.body.velocity.x += dx * pw; ep.body.velocity.z += dz * pw;
+      ep.body.velocity.y += c.lift || pw * 0.12;
+      const share = c.both ? 0.35 : c.heavy ? 0.16 : 0.08;
+      for (const lp of e.parts) { lp.body.velocity.x += dx * pw * share; lp.body.velocity.z += dz * pw * share; }
+    }
+    const rel = pw + Math.hypot(striker.body.velocity.x, striker.body.velocity.z) * 0.25;
+    e.receiveHit({ part: ep, v: rel, point, focus: 1.2, attacker: this, kind: this.act.type, dmgMul: c.dmg, dir: [dx, dz] });
+    this.events.push({ type: 'strike', move: this.act ? this.act.type : '', rag: this, victim: e, point, v: rel, heavy: !!c.heavy, blocked: !!e.lastBlocked });
+  }
+
+  /** Combat branch of receiveHit: block, flinch, stagger, knockdown. Returns damage multiplier. */
+  takeStrike(h) {
+    const c = CLIPS[h.kind];
+    const part = h.part;
+    const upper = part.name === 'head' || part.name === 'chest' || part.name.startsWith('upperArm') || part.name.startsWith('lowerArm') || part.name.startsWith('hand');
+    this.lastBlocked = false;
+    if (this.blocking && c.high && upper && !c.heavy) {
+      // forearms took it
+      this.lastBlocked = true;
+      this.stumble = Math.min(1, this.stumble + 0.12);
+      this.events.push({ type: 'block', rag: this, point: h.point });
+      return 0.2;
+    }
+    const fy = this.yawOf(this.pelvis);
+    const side = h.dir ? Math.sign(h.dir[0] * Math.cos(fy) - h.dir[1] * Math.sin(fy)) || 1 : 1;
+    const kind = part.name === 'head' ? 'head' : (part.name === 'chest' || part.name === 'abdomen' || part.name === 'pelvis') ? 'body' : 'low';
+    this.react = { pose: REACTIONS[kind](side), t: 0, dur: c.heavy ? 0.5 : 0.36 };
+    this.act = null; this.queued = null;
+    this.actCd = 0.18;
+    this.stumble = Math.min(1, this.stumble + (c.heavy ? 0.45 : 0.22));
+    const down = (c.heavy && (part.name === 'head' || this.hp < 45)) || this.hp < 20 || (this.blocking && c.heavy && Math.random() < 0.3);
+    if (down) this.goFall(h.kind);
+    return 1;
   }
 
   // ---------------------------------------------------------------- main update (per physics step)
@@ -767,7 +861,7 @@ export class Ragdoll {
     const chestUp = this.upOf(this.chest, v2).y;
     const pelvisUp = this.upOf(pelvis, v1).y;
 
-    if (input.limpToggle && this.state !== 'seated') {
+    if (input.limpToggle && this.state !== 'seated' && !this.dead) {
       if (this.state === 'limp') { this.state = 'getup'; this.stateT = 0; }
       else { this.state = 'limp'; this.stateT = 0; this.act = null; this.events.push({ type: 'limp', rag: this }); }
     }
@@ -799,7 +893,7 @@ export class Ragdoll {
       const need = this.koT > 0 || this.hp <= 0 ? 99 : 1.5;
       if (this.restT > need && !this.cannotStand() && this.diveT <= 0) { this.state = 'getup'; this.stateT = 0; }
       if (input.jump && this.restT > 0.4 && this.koT <= 0 && this.hp > 0 && !this.cannotStand()) { this.state = 'getup'; this.stateT = 0; }
-      if (this.koT <= 0 && this.hp <= 0) this.hp = 15; // came round
+      if (this.koT <= 0 && this.hp <= 0) this.hp = 35; // came round
     } else if (this.state === 'getup') {
       if (this.stateT > 1.5) {
         if (chestUp > 0.75 && this.grounded) { this.state = 'stand'; this.stateT = 0; this.stumble = 0.4; this.initFeet(); }
@@ -810,7 +904,10 @@ export class Ragdoll {
     if (this.state === 'stand' && this.hp < 100) this.hp = Math.min(100, this.hp + dt * 3);
 
     // ---- actions
-    this.crouching = this.state === 'stand' && !!input.crouch && !this.act;
+    this.combatTarget = this.state === 'stand' ? this.nearestEnemy(4.5) : null;
+    // C: in a fight it raises the guard, otherwise it crouches
+    this.blocking = this.state === 'stand' && !!input.crouch && !!this.combatTarget && !this.act;
+    this.crouching = this.state === 'stand' && !!input.crouch && !this.combatTarget && !this.act;
     if (this.state === 'stand') {
       if (input.jump && this.grounded && this.jumpCd <= 0 && !this.act) {
         this.jumpCd = 0.7;
@@ -826,16 +923,29 @@ export class Ragdoll {
         this.goFall('dive');
       }
       if (input.punch) this.startMove(input.shoveMode ? 'shove' : 'punch', input);
-      if (input.kick) this.startMove(input.sweep ? 'sweep' : 'kick', input);
+      if (input.kick) this.startMove(input.sweep && !this.combatTarget ? 'sweep' : 'kick', input);
+      this._lastInput = input;
     }
     if (this.act) {
       const a = this.act;
+      const c = a.clip;
       a.t += dt;
-      const d = MOVES[a.type];
-      if (d.limbs.length && a.t > d.wind && a.t < d.wind + d.strike) this.strikeAssist();
-      if (a.t > d.wind + d.strike + d.rec) { this.act = null; this.actCd = 0.12; }
-      if (this.state !== 'stand') this.act = null;
+      if (c.lunge) {
+        for (const [lt, sp] of c.lunge) {
+          if (a.lunged.has(lt) || a.t < lt) continue;
+          a.lunged.add(lt);
+          const fx = Math.sin(this.yawTarget), fz = Math.cos(this.yawTarget);
+          this.addVelocity(fx * sp, a.type === 'flykick' ? 2.2 : 0, fz * sp);
+        }
+      }
+      if (c.limb && a.t > c.hit[0] && a.t < c.hit[1]) this.strikeAssist();
+      if (a.t >= c.dur) {
+        this.act = null; this.actCd = 0.03; this.lastMoveEnd = this.time;
+        if (this.queued) { const q = this.queued; this.queued = null; this.actCd = 0; this.startMove(q, this._lastInput); }
+      }
+      if (this.state !== 'stand') { this.act = null; this.queued = null; }
     }
+    if (this.react) { this.react.t += dt; if (this.react.t > this.react.dur || this.state !== 'stand') this.react = null; }
 
     // ---- muscle strength & balance per state
     let muscle = 1, balanceTarget = 1;
@@ -843,7 +953,7 @@ export class Ragdoll {
       case 'stand': balanceTarget = 1 - this.stumble * 0.85; break;
       case 'fall':
         balanceTarget = 0;
-        muscle = this.koT > 0 || this.hp <= 0 ? 0.03 : this.diveT > 0 ? 0.8 : (this.nearGround ? 0.28 : 0.5);
+        muscle = this.dead ? 0 : this.koT > 0 || this.hp <= 0 ? 0.03 : this.crawling ? 0.7 : this.diveT > 0 ? 0.8 : (this.nearGround ? 0.28 : 0.5);
         break;
       case 'getup': {
         const k = Math.min(1, this.stateT / 1.2);
@@ -864,6 +974,10 @@ export class Ragdoll {
       dvz = (input.moveZ / moveLen) * wantSpeed;
       if (!this.act && !input.faceTarget) this.yawTarget = Math.atan2(dvx, dvz);
     }
+    if (this.combatTarget && !this.act && !input.faceTarget && this.isPlayer) {
+      const t = this.combatTarget;
+      this.yawTarget = Math.atan2(t.pelvis.position.x - pelvis.position.x, t.pelvis.position.z - pelvis.position.z);
+    }
     if (input.faceTarget && this.state === 'stand' && !this.act) {
       const t = input.faceTarget;
       this.yawTarget = Math.atan2(t.pelvis.position.x - pelvis.position.x, t.pelvis.position.z - pelvis.position.z);
@@ -875,13 +989,46 @@ export class Ragdoll {
       if (this.state !== 'stand' || moveLen > 0.01 || this.act || input.jump) this.emote = null;
     }
 
+    // can't get up but still awake: drag yourself with the arms
+    this.crawling = this.state === 'fall' && !this.dead && this.koT <= 0 && this.hp > 0 && this.nearGround
+      && (this.restT > 0.25 || this.crawling) && this.cannotStand() && moveLen > 0.01;
+    if (this.crawling !== this._crawlMat) {
+      this._crawlMat = this.crawling;
+      for (const p of this.parts) p.body.material = this.crawling ? MAT.crawl : MAT.ragdoll;
+    }
+    if (this.crawling) {
+      this.crawlT = (this.crawlT || 0) + dt;
+      const cx = input.moveX / moveLen, cz = input.moveZ / moveLen;
+      // each arm pulls in its half of the cycle; a little rest in between
+      const pull = 0.45 + 0.55 * Math.max(0, Math.sin(this.crawlT * Math.PI * 1.6 * 2));
+      const sp = 1.1 * pull;
+      // the hands push on the floor: forward drive on the trunk, and part of
+      // the chest's weight comes off the ground so it slides instead of sticking
+      const tv = this.chest.velocity;
+      let fx2 = (cx * sp - tv.x) * 30, fz2 = (cz * sp - tv.z) * 30;
+      const fl = Math.hypot(fx2, fz2), fmax = 18;
+      if (fl > fmax) { fx2 *= fmax / fl; fz2 *= fmax / fl; }
+      for (const p of this.parts) {
+        const m = p.body.mass * pull;
+        p.body.force.x += m * fx2;
+        p.body.force.z += m * fz2;
+      }
+      for (const b of [this.chest, this.partMap.abdomen.body, this.pelvis, this.head]) b.force.y += b.mass * G_EST * 0.8 * pull;
+      // turn the head end toward where he is going
+      const fy = this.yawOf(this.chest);
+      let yErr = Math.atan2(cx, cz) - fy;
+      yErr = Math.atan2(Math.sin(yErr), Math.cos(yErr));
+      this.chest.angularVelocity.y += (yErr * 1.5 - this.chest.angularVelocity.y) * 0.05;
+    }
+
     // ---- feet & pose
     if (this.state === 'stand') this.updateGait(dt, vel, hSpeed);
     else if (this.plants.L || this.plants.R) this.unplantAll();
     this.computePose(dt, hSpeed, vel);
 
     // ---- muscles
-    for (const j of this.joints) this.servo(j, dt, muscle * j.weak);
+    const snap = this.act && this.state === 'stand' ? 1.6 : 1;
+    for (const j of this.joints) this.servo(j, dt, muscle * j.weak * snap);
     for (const j of this.joints) if (j.type === 'hinge') this.hingeLimit(j, dt);
 
     // ---- balance cheats
@@ -890,7 +1037,8 @@ export class Ragdoll {
       const lean = this.state === 'stand' ? this.tune.lean : 0;
       v4.set(dvx * lean, 1, dvz * lean).normalize();
       const yawStrength = this.state === 'getup' ? 0.4 : 1;
-      this.upright(this.pelvis, v4, this.yawTarget, b, 1400 * this.tune.upright, yawStrength, dt, this.tune.trunkGain);
+      const spinYaw = this.act ? this.yawTarget + clipSpin(this.act.clip, this.act.t) : this.yawTarget;
+      this.upright(this.pelvis, v4, spinYaw, b, 1400 * this.tune.upright, yawStrength, dt, this.tune.trunkGain);
       this.upright(this.partMap.abdomen.body, v4, this.yawTarget, b * 0.6, 300, yawStrength, dt);
       this.upright(this.chest, v4, this.yawTarget, b, 900 * this.tune.upright, yawStrength, dt, this.tune.trunkGain);
       this.upright(this.head, v4, this.yawTarget, b * 0.5, 40, 0.4, dt);
@@ -901,9 +1049,10 @@ export class Ragdoll {
         if (this.state === 'stand') {
           ref = this.groundRef;
           if (this.crouching) targetH = 0.62;
+          else if (this.act) targetH -= 0.05 - clipDrop(this.act.clip, this.act.t);
+          else if (this.combatTarget) targetH -= 0.05 + 0.012 * Math.sin(this.time * 7);
           else if (this.emote) targetH -= this.emoteBob();
-          else if (this.act && this.act.type === 'sweep') targetH = 0.55;
-          else if (hSpeed > 0.5) targetH -= 0.03 * Math.min(1, hSpeed / 4);
+          else if (hSpeed > 0.5) targetH -= 0.03 * Math.min(1, hSpeed / 4) + (hSpeed > 3.2 ? 0.07 : 0);
         }
         if (this.state === 'getup') targetH = 0.5 + 0.43 * Math.min(1, this.stateT / 1.1);
         if (this.cannotStand()) targetH = 0.4;
@@ -973,8 +1122,10 @@ export class Ragdoll {
       ideal[S] = [P.x + lx * w * sx + vel.x * lead, P.z + lz * w * sx + vel.z * lead];
     }
 
-    // pick the next foot to move
-    if (!this.swingSide) {
+    const kickLeg = this.act && this.act.clip.leg;
+    if (kickLeg) this.unplant(kickLeg);
+    // pick the next foot to move (not while a kick is planted on the other one)
+    if (!this.swingSide && !kickLeg) {
       const err = {};
       for (const S of ['L', 'R']) {
         const f = this.feet[S].plant;
@@ -1022,6 +1173,16 @@ export class Ragdoll {
         foot.velocity.x += (vx - foot.velocity.x) * blend;
         foot.velocity.y += (vy - foot.velocity.y) * blend;
         foot.velocity.z += (vz - foot.velocity.z) * blend;
+        if (run) {
+          // a running leg swings through as a whole: steering only the foot
+          // left the thigh and shin trailing, so feet landed behind the hips
+          const shin = this.partMap['shin' + S].body, thigh = this.partMap['thigh' + S].body;
+          const k2 = blend * this.tune.legSwing;
+          shin.velocity.x += (vx * 0.6 + vel.x * 0.4 - shin.velocity.x) * k2;
+          shin.velocity.z += (vz * 0.6 + vel.z * 0.4 - shin.velocity.z) * k2;
+          thigh.velocity.x += (vx * 0.3 + vel.x * 0.7 - thigh.velocity.x) * k2 * 0.5;
+          thigh.velocity.z += (vz * 0.3 + vel.z * 0.7 - thigh.velocity.z) * k2 * 0.5;
+        }
 
         if (f.t >= 1) {
           f.swing = false; f.plant.copy(f.to); f.g = f.gTo;
@@ -1039,14 +1200,14 @@ export class Ragdoll {
           if (this.plants[S]) this.unplant(S);
           const hx = P.x + lx * 0.095 * sx, hz = P.z + lz * 0.095 * sx;
           const behind = -((f.plant.x - hx) * fx + (f.plant.z - hz) * fz);
-          if (behind > 0.4) {
-            const ex = behind - 0.4;
+          if (behind > 0.52) {
+            const ex = behind - 0.52;
             f.cur.x += fx * ex; f.cur.z += fz * ex;
             f.cur.y += Math.min(0.25, ex * 0.6);
           }
         }
         // pin the foot once it is actually on something (walking and standing)
-        if (!run && !this.plants[S] && f.plantBody && foot.position.y - f.g < 0.09) this.plantFoot(S, f.plantBody);
+        if (!run && S !== kickLeg && !this.plants[S] && f.plantBody && foot.position.y - f.g < 0.09) this.plantFoot(S, f.plantBody);
         // a pinned foot follows what it stands on (crates, platforms)
         const pl = this.plants[S];
         if (pl && pl.body.type !== CANNON.Body.STATIC) {
@@ -1168,7 +1329,7 @@ export class Ragdoll {
       this.setJ('shoulderR', -Math.cos(ph) * armAmp + 0.04, 0, -0.13 - st2 * 0.9);
       this.sym('elbow', -0.25 - 1.0 * L * walk);
       this.sym('wrist', 0);
-      this.waist(0.04 + 0.22 * L + breathe, Math.cos(ph) * 0.14 * walk, 0);
+      this.waist(0.04 + 0.1 * L + breathe, Math.cos(ph) * 0.14 * walk, 0);
       this.setJ('neck', -0.05 - 0.12 * L, 0, 0);
 
       if (this.crouching) {
@@ -1177,14 +1338,16 @@ export class Ragdoll {
         this.sym('elbow', -2.0);
         this.setJ('neck', -0.3);
       }
-      if (!this.grounded && this.airT > 0.05 && !this.act) {
+      if (!this.grounded && this.airT > (hSpeed > 3.2 ? 0.3 : 0.05) && !this.act) {
         this.sym('hip', -0.7, 0, 0.05);
         this.sym('knee', 1.2);
         this.sym('shoulder', -0.6, 0, 0.7);
         this.sym('elbow', -0.5);
       }
       if (this.emote) this.emotePose();
-      if (this.act) this.movePose(this.act);
+      if (this.combatTarget || this.act) this.applyPose(this.blocking ? BLOCK : GUARD);
+      if (this.act) this.applyPose(sampleClip(this.act.clip, this.act.t, this._clipPose || (this._clipPose = {})));
+      if (this.react) this.applyPose(this.react.pose, Math.sin(Math.PI * Math.min(1, this.react.t / this.react.dur)));
       if (this.grabHeld) {
         this.sym('shoulder', -1.5, 0, -0.05);
         this.sym('elbow', -0.1);
@@ -1250,6 +1413,19 @@ export class Ragdoll {
       return;
     }
 
+    if (this.crawling) {
+      // army crawl: one arm reaches ahead while the other drags back
+      const c = this.crawlT * Math.PI * 1.6;
+      const a = Math.sin(c), b2 = -a;
+      this.setJ('shoulderL', -2.3 + a * 0.9, 0, 0.35);
+      this.setJ('shoulderR', -2.3 + b2 * 0.9, 0, -0.35);
+      this.setJ('elbowL', -0.3 - Math.max(0, -a) * 1.4);
+      this.setJ('elbowR', -0.3 - Math.max(0, -b2) * 1.4);
+      this.sym('wrist', -0.3);
+      this.waist(-0.15, a * 0.15, 0);
+      this.setJ('neck', -0.45);
+      return;
+    }
     const wr = Math.sin(t * 2.6) * 0.25;
     this.setJ('hipL', -1.0 + wr, 0, 0.1);
     this.setJ('hipR', -0.8 - wr, 0, -0.1);
@@ -1333,45 +1509,15 @@ export class Ragdoll {
     }
   }
 
-  movePose(a) {
-    const d = MOVES[a.type];
-    const wind = a.t < d.wind;
-    const S = a.side, O = S === 'L' ? 'R' : 'L';
-    const sx = S === 'L' ? 1 : -1;
-    switch (a.type) {
-      case 'punch':
-        if (wind) { this.setJ('shoulder' + S, 0.35, 0, 0.25 * sx); this.setJ('elbow' + S, -2.2); }
-        else { this.setJ('shoulder' + S, -1.55, 0, -0.15 * sx); this.setJ('elbow' + S, -0.05); this.waist(0.12, -0.5 * sx, 0); }
-        this.setJ('shoulder' + O, -0.9, 0, 0.3 * -sx);
-        this.setJ('elbow' + O, -1.9);
-        break;
-      case 'kick':
-      case 'flykick':
-        if (wind) { this.setJ('hip' + S, -1.2, 0, 0); this.setJ('knee' + S, 2.0); }
-        else { this.setJ('hip' + S, -1.55, 0, 0); this.setJ('knee' + S, 0.05); this.setJ('ankle' + S, 0.3); }
-        if (a.type === 'flykick') { this.setJ('hip' + O, -0.4); this.setJ('knee' + O, 1.6); }
-        this.waist(-0.15);
-        this.sym('shoulder', -0.4, 0, 0.6);
-        break;
-      case 'sweep':
-        this.setJ('hip' + S, wind ? -0.3 : -0.9, 0, wind ? 0.2 * sx : -0.6 * sx);
-        this.setJ('knee' + S, 0.1);
-        this.setJ('hip' + O, -1.3, 0, 0);
-        this.setJ('knee' + O, 2.1);
-        this.waist(0.5, wind ? 0.4 * sx : -0.5 * sx, 0);
-        this.sym('shoulder', -0.8, 0, 0.5);
-        break;
-      case 'shove':
-        this.sym('shoulder', wind ? -0.9 : -1.5, 0, 0.05);
-        this.sym('elbow', wind ? -1.9 : -0.05);
-        this.sym('wrist', -1.0);
-        this.waist(wind ? 0.05 : 0.3);
-        break;
-      case 'reversal':
-        this.sym('shoulder', -1.6, 0, -0.2);
-        this.sym('elbow', -0.4);
-        this.waist(0.35, -0.4, 0);
-        break;
+  /** Set joint targets from a pose map; w < 1 blends from the current targets. */
+  applyPose(pose, w = 1) {
+    for (const name in pose) {
+      const j = this.jointMap[name];
+      if (!j) continue;
+      const v = pose[name];
+      if (typeof v === 'number') eul.set(v, 0, 0, 'XYZ'); else eul.set(v[0], v[1], v[2], 'XYZ');
+      if (w >= 1) j.target.setFromEuler(eul);
+      else j.target.slerp(qt.setFromEuler(eul), w);
     }
   }
 
@@ -1514,4 +1660,4 @@ export class Ragdoll {
   isOwnBody(b) { return !!(b.userData && b.userData.ragdoll === this); }
 }
 
-export { BONE_COUNT, MOVES };
+export { BONE_COUNT, CLIPS };

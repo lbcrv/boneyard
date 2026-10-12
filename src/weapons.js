@@ -59,7 +59,11 @@ export function fireSMG(origin, dir, muzzle) {
     if (blood.isBloodOn()) {
       blood.spray(h.point, _v.copy(d).negate(), 5, 2.2);
       blood.spray(h.point, d, 9, 4.5);
-      blood.wound(part, h.point, 0.012 + Math.random() * 0.01);
+      // head, neck and the femoral artery bleed out; everywhere else is a hole that drips
+      const local = b.pointToLocalFrame(new CANNON.Vec3(h.point.x, h.point.y, h.point.z), new CANNON.Vec3());
+      const neck = part.name === 'chest' && local.y > 0.08;
+      const artery = part.name.startsWith('thigh') && Math.random() < 0.4;
+      blood.wound(part, h.point, 0.012 + Math.random() * 0.01, part.name === 'head' || neck || artery ? 'severe' : 'open');
       // spatter on whatever is behind
       const back = rayHit(h.point.clone().addScaledVector(d, 0.35), h.point.clone().addScaledVector(d, 3));
       if (back && !(back.body.userData && back.body.userData.ragdoll)) blood.splat(back.point, back.normal, 0.15 + Math.random() * 0.25);

@@ -52,15 +52,17 @@ En Muro y Cruce eliges vehículo con `V` (carrito, descapotable, trineo cohete),
 
 | Tecla | Movimiento |
 |---|---|
-| `F` | Puñetazo (en sumo, empujón con las dos manos) |
-| `V` | Patada. En el aire, patada voladora |
-| `C` | Agacharse: los golpes altos pasan por encima |
+| `F` | Puñetazo. Pulsado otra vez a tiempo encadena jab, directo, gancho y uppercut (en sumo, empujón con las dos manos) |
+| `V` | Patada. Encadena frontal y circular; de cerca, rodillazo; en el aire, patada voladora |
+| `C` | Con un rival cerca, guardia alta: bloquea los golpes altos. Sin rival, agacharse |
 | `C` + `V` | Barrida |
 | `Q` | Placaje |
 
 **Contraataque:** si pulsas `F` o `V` justo cuando el rival empieza su golpe, le atrapas el brazo o la pierna y lo lanzas por encima del hombro. Los rivales también lo intentan contigo.
 
-Los golpes se fijan solos en el rival más cercano. Cada luchador tiene vida: los golpes la bajan, se recupera de pie, y a cero cae inconsciente.
+Los golpes se fijan solos en el rival más cercano. Cada luchador tiene una barra de consciencia: los golpes en la cabeza la bajan entera, los del tronco menos y los de brazos y piernas casi nada. Se recupera de pie, y a cero cae inconsciente.
+
+Un balazo en la cabeza, un cuello cercenado o una explosión muy cerca lo matan: queda inerte hasta reaparecer. Si tiene las dos piernas rotas o la columna partida no puede levantarse, pero sigue despierto: con `WASD` se arrastra con los brazos.
 
 ## Armas y herramientas
 
@@ -101,7 +103,7 @@ Los golpes se fijan solos en el rival más cercano. Cada luchador tiene vida: lo
 
 ## Ajustes
 
-- **Sangre:** desactivada por defecto. Con ella activada hay salpicaduras, heridas que gotean y charcos en el suelo. Se activa en el menú o con `B`, y el navegador recuerda la elección.
+- **Sangre:** desactivada por defecto. Con ella activada, los golpes dejan manchas, los balazos abren heridas que gotean y solo las heridas graves (cabeza, cuello, arteria, amputación) sueltan chorros y forman charcos. Los golpes muy violentos pueden arrancar un miembro. Cada reaparición limpia la sangre. Se activa en el menú o con `B`, y el navegador recuerda la elección.
 - **Calidad:** en automático, si el juego va lento baja la resolución y la sombra.
 
 ## Rendimiento
@@ -140,6 +142,7 @@ style.css
 src/main.js       render, cámara, entrada, herramientas, puntuación, bucle
 src/ragdoll.js    cuerpo, músculos, equilibrio, pasos con IK, combate, estados
 src/skeleton.js   los 206 huesos y las fracturas
+src/moves.js      golpes por fotogramas clave, guardia, bloqueo y reacciones
 src/combat.js     IA de luchador y de sumo
 src/modes.js      reglas de sumo, dojo y pistas de choque
 src/vehicles.js   carrito, descapotable y trineo cohete

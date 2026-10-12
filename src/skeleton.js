@@ -178,6 +178,12 @@ export class Skeleton {
     return false;
   }
 
+  countKind(kind) {
+    let n = 0;
+    for (const b of B) if (this.broken[b.id] && b.kind === kind) n++;
+    return n;
+  }
+
   /** Structural failure of a segment: a long bone or enough small bones gone. */
   segmentFailed(seg) {
     const list = BONES_BY_SEG[seg];

@@ -21,6 +21,8 @@ export class AIController {
     this.duckT = 0;
     this.tauntT = 0;
     this.target = null;
+    this.combo = null;
+    this.comboT = 0;
     this.avoidT = 0;
     this.avoidSide = 1;
     this.stuckT = 0;
@@ -99,12 +101,20 @@ export class AIController {
       // circle
       inp.moveX = -dz * this.strafe * 0.5; inp.moveZ = dx * this.strafe * 0.5;
     }
-    if (d < 1.45 && this.cool <= 0 && !inp.crouch) {
-      this.cool = (0.55 + Math.random() * 0.9) * (1.3 - this.skill * 0.6);
-      const roll = Math.random();
-      if (roll < 0.45 && d < 1.25) inp.punch = true;
-      else if (roll < 0.8) inp.kick = true;
-      else { inp.kick = true; inp.sweep = true; inp.crouch = true; }
+    // combos: the first press now, the rest timed to land in the chain window
+    if (this.combo && this.combo.length) {
+      this.comboT -= dt;
+      if (this.comboT <= 0) {
+        const k = this.combo.shift();
+        if (k === 'sweep') { inp.kick = true; inp.crouch = true; } else inp[k] = true;
+        this.comboT = 0.17;
+      }
+    } else if (d < 1.45 && this.cool <= 0 && !inp.crouch) {
+      this.cool = (0.7 + Math.random() * 1.0) * (1.3 - this.skill * 0.6);
+      const patterns = [['punch'], ['punch', 'punch'], ['punch', 'punch', 'punch'], ['kick'], ['punch', 'kick'], ['kick', 'kick'], ['sweep'], ['punch', 'punch', 'punch', 'punch']];
+      const pick = patterns[Math.min(patterns.length - 1, (Math.random() * (4 + this.skill * 5)) | 0)];
+      this.combo = pick.slice();
+      this.comboT = 0;
     }
     if (d < 3 && this.cool <= 0 && Math.random() < dt * 0.4) inp.dive = true; // the odd tackle
     return inp;

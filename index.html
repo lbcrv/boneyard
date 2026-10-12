@@ -15,21 +15,22 @@
       "three": "https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js",
       "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.160.0/examples/jsm/",
       "cannon-es": "https://cdn.jsdelivr.net/npm/cannon-es@0.20.0/dist/cannon-es.js",
-      "./src/audio.js": "./src/audio.js?v=d4aa4895",
-      "./src/blood.js": "./src/blood.js?v=8852da3e",
-      "./src/combat.js": "./src/combat.js?v=1b70807b",
+      "./src/audio.js": "./src/audio.js?v=0f6041d7",
+      "./src/blood.js": "./src/blood.js?v=f9a87647",
+      "./src/combat.js": "./src/combat.js?v=3e162252",
       "./src/fx.js": "./src/fx.js?v=5dc2ec92",
       "./src/icons.js": "./src/icons.js?v=127fb4a2",
       "./src/level.js": "./src/level.js?v=0f3686e7",
-      "./src/main.js": "./src/main.js?v=8ee66689",
+      "./src/main.js": "./src/main.js?v=29d5abd0",
       "./src/maps.js": "./src/maps.js?v=806d4d81",
       "./src/modes.js": "./src/modes.js?v=591f334a",
-      "./src/physics.js": "./src/physics.js?v=d5647feb",
-      "./src/ragdoll.js": "./src/ragdoll.js?v=5fc58dcc",
-      "./src/skeleton.js": "./src/skeleton.js?v=8d243548",
+      "./src/moves.js": "./src/moves.js?v=ef952761",
+      "./src/physics.js": "./src/physics.js?v=43bc2b6a",
+      "./src/ragdoll.js": "./src/ragdoll.js?v=455c4763",
+      "./src/skeleton.js": "./src/skeleton.js?v=513eb09b",
       "./src/textures.js": "./src/textures.js?v=f75d7914",
       "./src/vehicles.js": "./src/vehicles.js?v=6dad237c",
-      "./src/weapons.js": "./src/weapons.js?v=15e5426f"
+      "./src/weapons.js": "./src/weapons.js?v=dabafb41"
     }
   }
   </script>
@@ -71,7 +72,7 @@
         <dt>Espacio</dt><dd>saltar</dd>
         <dt>F</dt><dd>puñetazo</dd>
         <dt>V</dt><dd>patada</dd>
-        <dt>C</dt><dd>agacharse</dd>
+        <dt>C</dt><dd>agacharse / guardia</dd>
         <dt>C + V</dt><dd>barrida</dd>
         <dt>Q</dt><dd>placaje</dd>
         <dt>E</dt><dd>agarrar</dd>
@@ -87,7 +88,7 @@
         <dt>B</dt><dd>sangre</dd>
         <dt>Esc</dt><dd>menú</dd>
       </dl>
-      <div class="help-foot">Contraataque: pulsa F o V justo cuando el rival empieza su golpe.</div>
+      <div class="help-foot">Contraataque: pulsa F o V justo cuando el rival empieza su golpe. Sin poder levantarte, WASD te arrastra.</div>
     </div>
 
     <div id="popups"></div>
@@ -133,6 +134,6 @@
 
   <div id="loading">Cargando física…</div>
 
-  <script type="module" src="src/main.js?v=8ee66689"></script>
+  <script type="module" src="src/main.js?v=29d5abd0"></script>
 </body>
 </html>

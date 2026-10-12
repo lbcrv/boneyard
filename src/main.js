@@ -73,6 +73,7 @@ let timeScale = 1;
 let slowmo = false;
 let moonGravity = false;
 let hitStop = 0;
+let freeze = 0; // hit-stop: a few frames of total stillness when a blow lands
 let lastHitStop = -10;
 let tool = 0;
 let score = 0;
@@ -504,7 +505,9 @@ function bleed(e) {
   _bd.y += 0.4;
   const amount = Math.min(20, Math.round((e.v - 6) * 1.6));
   blood.spray(e.point, _bd, amount, 1.5 + e.v * 0.15);
-  if (e.v > 11 || e.broken.length) blood.wound(part, e.point, 0.015 + Math.min(0.03, e.v * 0.0015));
+  // blunt trauma only stains; a smashed long bone (compound fracture) opens the skin
+  const compound = e.broken.some((b) => b.kind === 'long' || b.kind === 'femur') && e.v > 16;
+  if (e.v > 11 || e.broken.length) blood.wound(part, e.point, 0.015 + Math.min(0.03, e.v * 0.0015), compound ? 'open' : 'minor');
 }
 
 function noteBones(rag, list) {
@@ -538,6 +541,22 @@ function handleEvents(rag) {
         }
         break;
       }
+      case 'sever': {
+        const j = e.joint;
+        // both stumps pump blood: on the body side and on the limb that came off
+        for (const [part, piv] of [[j.P, j.constraint.pivotA], [j.C, j.constraint.pivotB]]) {
+          const lp = new THREE.Vector3(piv.x, piv.y, piv.z);
+          const nrm = lp.lengthSq() > 1e-6 ? lp.clone().normalize() : new THREE.Vector3(0, 1, 0);
+          blood.wound(part, null, 0.05, 'severe', lp, nrm);
+        }
+        blood.spray(e.point, new THREE.Vector3(0, 1, 0), 30, 4.5, 1.2);
+        sfx.crack(); sfx.thud(22, true); sfx.grunt(1.4);
+        if (isP || scores(rag)) {
+          fx.banner('AMPUTACIÓN', partLabel(j.C));
+          addPoints(600, 'AMPUTACIÓN', e.point, 'head');
+        }
+        break;
+      }
       case 'blast':
         noteBones(rag, e.broken);
         sfx.crack();
@@ -550,13 +569,29 @@ function handleEvents(rag) {
         // winners dance
         if (isP) for (const f of fighters) if (f.rag.state === 'stand' && Math.random() < 0.7) f.rag.setEmote(Math.random() < 0.5 ? 'disco' : 'robot');
         break;
+      case 'death':
+        if (isP) fx.banner('MUERTO', 'R PARA REINICIAR');
+        else fx.popup(e.point, 'MUERTO', 'head', 34);
+        if (scores(rag)) addPoints(1000, 'LETAL', e.point, 'big');
+        if (isP) for (const f of fighters) if (f.rag.state === 'stand' && Math.random() < 0.7) f.rag.setEmote(Math.random() < 0.5 ? 'disco' : 'robot');
+        break;
       case 'reversal':
         sfx.whoosh(); sfx.grunt(1.2);
         if (isP) { fx.banner('CONTRAATAQUE'); addPoints(250, 'CONTRAATAQUE', e.point, 'big'); }
         else if (e.victim === player) fx.banner('TE CONTRAATACAN');
         break;
-      case 'strike':
-        if (e.v > 8) fx.shake(rag === player || e.victim === player ? 0.35 : 0.15);
+      case 'strike': {
+        const mine = rag === player || e.victim === player;
+        sfx.punch(e.v, e.blocked);
+        fx.sparks(e.point, e.blocked ? 4 : 7, e.blocked ? 0xd9d6cf : 0xfff2d0, e.blocked ? 2 : 3.5);
+        if (mine) {
+          freeze = Math.max(freeze, e.blocked ? 0.035 : e.heavy ? 0.09 : 0.055);
+          fx.shake(e.heavy ? 0.45 : 0.22);
+        }
+        break;
+      }
+      case 'block':
+        if (isP) fx.popup(e.point, 'BLOQUEO', '', 18);
         break;
       case 'swing': sfx.whoosh(); break;
       case 'eject': {
@@ -644,7 +679,7 @@ function updateHUD() {
   elCombo.classList.toggle('hidden', !comboLive);
   if (comboLive) elCombo.textContent = '×' + mult.toFixed(1).replace('.', ',');
   const ds = player.displayState;
-  const cls = { stand: 'stand', air: 'stand', stumble: 'stumble', fall: 'fall', down: 'fall', ko: 'ko', wrecked: 'ko', getup: 'getup', limp: 'limp', seated: 'stand', crouch: 'stand', attack: 'stumble', emote: 'getup' }[ds] || 'fall';
+  const cls = { stand: 'stand', air: 'stand', stumble: 'stumble', fall: 'fall', down: 'fall', ko: 'ko', dead: 'ko', crawl: 'fall', wrecked: 'ko', getup: 'getup', limp: 'limp', seated: 'stand', crouch: 'stand', attack: 'stumble', emote: 'getup', block: 'stand' }[ds] || 'fall';
   elState.className = 'state ' + cls;
   elState.textContent = ds === 'emote' && emoteIdx >= 0 ? EMOTES[emoteIdx][1] : (STATE_LABEL[ds] || ds);
   if (currentMap?.timed) {
@@ -724,7 +759,7 @@ function respawn(silent = false) {
   releaseGrab();
   const yaw = currentMap.spawn.yaw;
   player.reset(spawnPos(), yaw);
-  blood.clearWoundsOf(player);
+  blood.clearBlood(); // a fresh run starts clean (and keeps the decal pools small)
   player.out = false;
   cam.yaw = yaw + Math.PI;
   cam.target.copy(spawnPos()).add(new THREE.Vector3(0, 1.5, 0));
@@ -869,7 +904,8 @@ function tick(dt, render = true) {
   const targetScale = hitStop > 0 ? 0.22 : slowmo ? 0.3 : 1;
   timeScale += (targetScale - timeScale) * Math.min(1, dt * (hitStop > 0 ? 30 : 5));
 
-  if (!paused) {
+  if (freeze > 0) { freeze -= dt; acc = 0; }
+  if (!paused && freeze <= 0) {
     acc += dt;
     let steps = 0;
     // lots awake (big explosions): fewer solver iterations keeps the frame rate up
