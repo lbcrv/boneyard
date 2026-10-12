@@ -216,6 +216,27 @@ html, body {
 .tg-hint { display: flex; flex-direction: column; align-items: center; gap: 4px; padding: 0 2px 6px; font-family: var(--f-tech); font-size: 9px; letter-spacing: 1.5px; color: #8d8a82; text-transform: uppercase; }
 .tg-hint .k { color: #0b0b0b; background: var(--y); border-color: var(--y); }
 
+/* the tool in hand (PC: the wheel replaces the bar) */
+#equipped {
+  position: absolute; left: 50%; bottom: 18px; transform: translateX(-50%);
+  display: none; align-items: center; gap: 12px; padding: 8px 14px 8px 10px;
+  background: rgba(8, 8, 8, 0.86); border: 2px solid #1c1c1c; border-bottom: 4px solid var(--gc, var(--y));
+  box-shadow: 0 10px 24px rgba(0, 0, 0, 0.5);
+}
+#equipped.flash { animation: eq-flash 0.35s ease-out; }
+@keyframes eq-flash { from { transform: translateX(-50%) scale(1.12); } }
+.eq-ico { line-height: 0; color: var(--y); }
+.eq-ico svg { width: 30px; height: 30px; }
+.eq-txt { display: flex; flex-direction: column; }
+.eq-grp { font-family: var(--f-tech); font-weight: 700; font-size: 9px; letter-spacing: 2px; color: #8d8a82; }
+.eq-name { font-family: var(--f-poster); font-size: 24px; line-height: 1; letter-spacing: 1px; color: #f4f2ec; text-transform: uppercase; }
+.eq-hint { margin-left: 6px; padding-left: 12px; border-left: 1px solid #2c2c2c; font-family: var(--f-tech); font-size: 10px; letter-spacing: 1.5px; color: #8d8a82; text-transform: uppercase; }
+.eq-hint .k { color: #0b0b0b; background: var(--y); border-color: var(--y); margin-right: 4px; }
+@media (hover: hover) and (pointer: fine) and (min-width: 761px) {
+  .tray { display: none; }
+  #equipped { display: flex; }
+}
+
 /* the wheel */
 #wheel {
   position: absolute; inset: 0; display: none; pointer-events: auto;

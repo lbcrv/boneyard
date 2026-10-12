@@ -367,7 +367,20 @@ function trackSpawn(b) {
 function selectTool(i) {
   tool = i;
   document.querySelectorAll('.tool').forEach((el, j) => el.classList.toggle('active', j === i));
+  showEquipped();
   sfx.blip(520 + i * 30);
+}
+
+/** On PC the tool bar gives way to the wheel; this tag says what is in hand. */
+function showEquipped() {
+  const el = document.getElementById('equipped');
+  if (!el) return;
+  const t = TOOLS[tool];
+  el.querySelector('.eq-ico').innerHTML = ICONS[t.id];
+  el.querySelector('.eq-grp').textContent = TOOL_GROUPS[t.id].name;
+  el.querySelector('.eq-name').textContent = t.nm;
+  el.className = 'g-' + TOOL_GROUPS[t.id].key;
+  el.classList.remove('flash'); void el.offsetWidth; el.classList.add('flash');
 }
 
 function muzzlePoint(dir) {
@@ -1000,6 +1013,7 @@ function buildToolbar() {
   hint.innerHTML = '<span class="k">Tab</span><span>rueda</span>';
   bar.appendChild(hint);
   wheel = createWheel({ tools: TOOLS, icons: ICONS, groups: TOOL_GROUPS, current: () => tool, onPick: (i) => selectTool(i) });
+  showEquipped();
 }
 
 // ------------------------------------------------------------------ performance guard
