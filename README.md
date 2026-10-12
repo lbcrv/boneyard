@@ -62,7 +62,7 @@ En Muro y Cruce eliges vehículo con `V` (carrito, descapotable, trineo cohete),
 
 Los golpes se fijan solos en el rival más cercano. Cada luchador tiene una barra de consciencia: los golpes en la cabeza la bajan entera, los del tronco menos y los de brazos y piernas casi nada. Se recupera de pie, y a cero cae inconsciente.
 
-Un balazo en la cabeza, un cuello cercenado o una explosión muy cerca lo matan: queda inerte hasta reaparecer. Si tiene las dos piernas rotas o la columna partida no puede levantarse, pero sigue despierto: con `WASD` se arrastra con los brazos.
+Un balazo en la cabeza, un cuello cercenado o una explosión muy cerca lo matan: queda inerte hasta reaparecer. Si le arrancan una pierna o un pie, o tiene las dos piernas rotas o la columna partida, no puede levantarse, pero sigue despierto: con `WASD` se arrastra con los brazos. Sin un brazo no puede golpear con él. Si está agarrado a algo y tiran de él con violencia, se le arranca el brazo y la mano se queda agarrada.
 
 ## Armas y herramientas
 
@@ -103,7 +103,7 @@ Un balazo en la cabeza, un cuello cercenado o una explosión muy cerca lo matan:
 
 ## Ajustes
 
-- **Sangre:** desactivada por defecto. Con ella activada, los golpes dejan manchas, los balazos abren heridas que gotean y solo las heridas graves (cabeza, cuello, arteria, amputación) sueltan chorros y forman charcos. Los golpes muy violentos pueden arrancar un miembro. Cada reaparición limpia la sangre. Se activa en el menú o con `B`, y el navegador recuerda la elección.
+- **Sangre:** desactivada por defecto. Con ella activada, los golpes dejan manchas, los balazos abren heridas que gotean y solo las heridas graves (cabeza, cuello, arteria, amputación) sueltan chorros. En el suelo la sangre es un líquido: las gotas se juntan, los charcos se extienden y se secan oscuros con el tiempo, pisarlos deja huellas y un cuerpo ensangrentado arrastrado deja rastro. En las paredes, las salpicaduras grandes escurren hacia abajo. Los golpes muy violentos pueden arrancar un miembro. Cada reaparición limpia la sangre. Se activa en el menú o con `B`, y el navegador recuerda la elección.
 - **Calidad:** en automático, si el juego va lento baja la resolución y la sombra.
 
 ## Rendimiento
@@ -147,7 +147,8 @@ src/combat.js     IA de luchador y de sumo
 src/modes.js      reglas de sumo, dojo y pistas de choque
 src/vehicles.js   carrito, descapotable y trineo cohete
 src/weapons.js    subfusil, bazuca, nuclear, minas
-src/blood.js      sangre opcional
+src/blood.js      sangre opcional: heridas, chorros, salpicaduras, huellas
+src/bloodfluid.js la sangre del suelo como líquido simulado
 src/level.js      objetos, barriles, camiones, piezas móviles, explosiones
 src/maps.js       las diez pruebas
 src/physics.js    mundo físico y materiales

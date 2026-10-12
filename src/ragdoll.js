@@ -78,6 +78,7 @@ function jointDefs() {
 }
 
 // scratch
+const _gA = new CANNON.Vec3(), _gB = new CANNON.Vec3();
 const qp = new THREE.Quaternion();
 const qc = new THREE.Quaternion();
 const qt = new THREE.Quaternion();
@@ -136,10 +137,11 @@ export class Ragdoll {
     this.events = [];
     this.totalMass = 0;
     this.grips = { L: null, R: null };
+    this.leftGrips = [];
     this.skeleton = new Skeleton();
     this.feet = { L: null, R: null };
     this.plants = { L: null, R: null };
-    this.tune = { upright: 1, runBlend: 0.6, runLead: 0.42, lean: 0.03, hipReaction: 1, trunkGain: 6, legSwing: 2 };
+    this.tune = { upright: 1, runBlend: 0.6, runLead: 0.25, lean: 0.03, hipReaction: 1, trunkGain: 6, legSwing: 1.4, runClear: 0.3, toeOff: 0.38, tearStretch: 0.12, tearStrain: 0.2 };
     this.pendingHits = [];
     this.pendingGrips = [];
     this.build();
@@ -309,11 +311,15 @@ export class Ragdoll {
       if (p.stains) { p.stains.length = 0; p.stainU.uBloodN.value = 0; p.bleedT = 0; }
       p.mat.color.copy(p.baseColor);
     }
+    for (const p of this.parts) p.detached = false;
+    this.liveMass = this.totalMass;
     for (const j of this.joints) {
       if (j.severed) { world.addConstraint(j.constraint); j.severed = false; }
       j.broken = false; j.weak = 1; j.target.identity(); j.prevTarget.identity();
     }
     this.releaseGrip('L'); this.releaseGrip('R');
+    if (this.leftGrips) for (const c of this.leftGrips) world.removeConstraint(c);
+    this.leftGrips = [];
     this.skeleton.reset();
     Object.assign(this, {
       state: 'stand', stateT: 0, balance: 1, stumble: 0, restT: 0, koT: 0, airT: 0, tiltT: 0,
@@ -369,14 +375,23 @@ export class Ragdoll {
     return this.state;
   }
 
+  /** Still connected to the trunk (nothing between it and the pelvis was cut off)? */
+  attached(name) {
+    let p = this.partMap[name];
+    while (p && p.joint) { if (p.joint.severed) return false; p = p.joint.P; }
+    return true;
+  }
+
   legFailed(S) {
-    if (this.jointMap['hip' + S].severed || this.jointMap['knee' + S].severed) return true;
+    if (!this.attached('foot' + S)) return true;
     return this.skeleton.segmentFailed('thigh' + S) || this.skeleton.segmentFailed('shin' + S);
   }
 
   cannotStand() {
     if (this.paralysed || this.dead) return true;
     if (this.skeleton.segmentFailed('pelvis')) return true;
+    // a missing foot or leg: nothing to stand on that side. Broken bones need both legs gone
+    if (!this.attached('foot' + 'L') || !this.attached('foot' + 'R')) return true;
     return this.legFailed('L') && this.legFailed('R');
   }
 
@@ -414,7 +429,7 @@ export class Ragdoll {
     if (this.pendingHits.length) {
       const hits = this.pendingHits;
       this.pendingHits = [];
-      for (const h of hits) this.receiveHit(h);
+      for (const h of hits) if (!h.part.detached) this.receiveHit(h);
     }
     if (this.pendingGrips.length) {
       const grips = this.pendingGrips;
@@ -534,6 +549,9 @@ export class Ragdoll {
       let p = jj.C;
       while (p) { if (p === j.C) { jj.broken = true; break; } p = p.joint ? p.joint.P : null; }
     }
+    // the cut-off piece is just meat now: no muscles, no balance, no steering
+    for (const p of this.parts) if (!this.attached(p.name)) p.detached = true;
+    this.liveMass = this.parts.reduce((m, p) => m + (p.detached ? 0 : p.body.mass), 0);
     if (j.name === 'neck') this.kill(point, true);
     this.events.push({ type: 'sever', joint: j, part: j.C, point: point || new THREE.Vector3().copy(j.C.body.position), rag: this });
     if (this.state !== 'fall') this.goFall('sever');
@@ -586,6 +604,34 @@ export class Ragdoll {
     this.events.push({ type: 'grip', point: new THREE.Vector3(handWorld.x, handWorld.y, handWorld.z), rag: this });
   }
 
+  /*
+   * Hanging on while something yanks him away: the grip joint stretches. A
+   * sustained hard pull tears the arm off at its weakest point (wrist, elbow
+   * or shoulder) and the hand stays clamped to what it held. Without blood,
+   * the hand just slips off.
+   */
+  gripStrain(dt) {
+    for (const S of ['L', 'R']) {
+      const g = this.grips[S];
+      if (!g) continue;
+      const hand = this.partMap['hand' + S].body;
+      const a = hand.pointToWorldFrame(g.c.pivotA, _gA);
+      const b = g.other.pointToWorldFrame(g.c.pivotB, _gB);
+      const stretch = Math.hypot(a.x - b.x, a.y - b.y, a.z - b.z);
+      g.strain = Math.max(0, (g.strain || 0) + (stretch > this.tune.tearStretch ? (stretch - this.tune.tearStretch) * 9 : -0.6) * dt);
+      // a sustained hard pull, or one violent yank
+      if (g.strain < this.tune.tearStrain && stretch < 0.3) continue;
+      const r = Math.random();
+      const jn = (r < 0.4 ? 'wrist' : r < 0.7 ? 'elbow' : 'shoulder') + S;
+      const point = new THREE.Vector3(a.x, a.y, a.z);
+      this.grips[S] = null;
+      if (this.sever(this.jointMap[jn], point)) {
+        this.leftGrips.push(g.c); // the torn-off hand keeps holding on
+        this.events.push({ type: 'tear', rag: this, point, joint: jn });
+      } else world.removeConstraint(g.c);
+    }
+  }
+
   releaseGrip(side) {
     const g = this.grips[side];
     if (g) { world.removeConstraint(g.c); this.grips[side] = null; }
@@ -599,19 +645,21 @@ export class Ragdoll {
   comVelocity(out) {
     out.set(0, 0, 0);
     for (const p of this.parts) {
+      if (p.detached) continue;
       const b = p.body;
       out.x += b.velocity.x * b.mass; out.y += b.velocity.y * b.mass; out.z += b.velocity.z * b.mass;
     }
-    return out.multiplyScalar(1 / this.totalMass);
+    return out.multiplyScalar(1 / (this.liveMass || this.totalMass));
   }
 
   comPosition(out) {
     out.set(0, 0, 0);
     for (const p of this.parts) {
+      if (p.detached) continue;
       const b = p.body;
       out.x += b.position.x * b.mass; out.y += b.position.y * b.mass; out.z += b.position.z * b.mass;
     }
-    return out.multiplyScalar(1 / this.totalMass);
+    return out.multiplyScalar(1 / (this.liveMass || this.totalMass));
   }
 
   yawOf(body) {
@@ -675,8 +723,12 @@ export class Ragdoll {
       const chain = CHAINS[kind] || CHAINS.punch;
       const cont = this.chainKind === kind && this.time - this.lastMoveEnd < 0.45;
       this.chainIdx = cont ? (this.chainIdx + 1) % chain.length : 0;
+      // skip moves thrown with a limb he no longer has
+      for (let k = 0; k < chain.length && !this.attached(CLIPS[chain[this.chainIdx]].limb); k++) this.chainIdx = (this.chainIdx + 1) % chain.length;
       name = chain[this.chainIdx];
     }
+    if (CLIPS[name].limb && !this.attached(CLIPS[name].limb)) return;
+    if (CLIPS[name].both && !this.attached('handL') && !this.attached('handR')) return;
     this.chainKind = kind;
     if (target) this.yawTarget = Math.atan2(target.pelvis.position.x - this.pelvis.position.x, target.pelvis.position.z - this.pelvis.position.z);
     else if (input && input.camYaw !== undefined && this.isPlayer) this.yawTarget = input.camYaw;
@@ -720,7 +772,7 @@ export class Ragdoll {
   strikeAssist() {
     const a = this.act;
     const c = a.clip;
-    const limbs = c.both ? ['handL', 'handR'] : [c.limb];
+    const limbs = (c.both ? ['handL', 'handR'] : [c.limb]).filter((n) => this.attached(n));
     if (!a.aim) {
       const e = this.nearestEnemy(2.0);
       a.aim = e ? { e, part: e.partMap[c.aim[(Math.random() * c.aim.length) | 0]] } : { e: null };
@@ -833,6 +885,7 @@ export class Ragdoll {
     }
     this.grabHeld = !!input.grab && this.state !== 'limp' && this.state !== 'seated';
     if (!input.grab) { this.releaseGrip('L'); this.releaseGrip('R'); }
+    this.gripStrain(dt);
 
     this.processHits();
     const pelvis = this.pelvis;
@@ -1009,6 +1062,7 @@ export class Ragdoll {
       const fl = Math.hypot(fx2, fz2), fmax = 18;
       if (fl > fmax) { fx2 *= fmax / fl; fz2 *= fmax / fl; }
       for (const p of this.parts) {
+        if (p.detached) continue;
         const m = p.body.mass * pull;
         p.body.force.x += m * fx2;
         p.body.force.z += m * fz2;
@@ -1028,8 +1082,8 @@ export class Ragdoll {
 
     // ---- muscles
     const snap = this.act && this.state === 'stand' ? 1.6 : 1;
-    for (const j of this.joints) this.servo(j, dt, muscle * j.weak * snap);
-    for (const j of this.joints) if (j.type === 'hinge') this.hingeLimit(j, dt);
+    for (const j of this.joints) if (!j.C.detached) this.servo(j, dt, muscle * j.weak * snap);
+    for (const j of this.joints) if (j.type === 'hinge' && !j.C.detached) this.hingeLimit(j, dt);
 
     // ---- balance cheats
     const b = this.balance;
@@ -1041,7 +1095,7 @@ export class Ragdoll {
       this.upright(this.pelvis, v4, spinYaw, b, 1400 * this.tune.upright, yawStrength, dt, this.tune.trunkGain);
       this.upright(this.partMap.abdomen.body, v4, this.yawTarget, b * 0.6, 300, yawStrength, dt);
       this.upright(this.chest, v4, this.yawTarget, b, 900 * this.tune.upright, yawStrength, dt, this.tune.trunkGain);
-      this.upright(this.head, v4, this.yawTarget, b * 0.5, 40, 0.4, dt);
+      if (!this.head.userData.part.detached) this.upright(this.head, v4, this.yawTarget, b * 0.5, 40, 0.4, dt);
 
       if (this.grounded) {
         let targetH = STAND_H;
@@ -1052,7 +1106,7 @@ export class Ragdoll {
           else if (this.act) targetH -= 0.05 - clipDrop(this.act.clip, this.act.t);
           else if (this.combatTarget) targetH -= 0.05 + 0.012 * Math.sin(this.time * 7);
           else if (this.emote) targetH -= this.emoteBob();
-          else if (hSpeed > 0.5) targetH -= 0.03 * Math.min(1, hSpeed / 4) + (hSpeed > 3.2 ? 0.07 : 0);
+          else if (hSpeed > 0.5) targetH -= 0.03 * Math.min(1, hSpeed / 4) + (hSpeed > 3.2 ? 0.01 : 0);
         }
         if (this.state === 'getup') targetH = 0.5 + 0.43 * Math.min(1, this.stateT / 1.1);
         if (this.cannotStand()) targetH = 0.4;
@@ -1073,7 +1127,7 @@ export class Ragdoll {
         const pinnedL = this.plants.L ? this.partMap.footL.body : null;
         const pinnedR = this.plants.R ? this.partMap.footR.body : null;
         for (const p of this.parts) {
-          if (p.body === pinnedL || p.body === pinnedR) continue; // a planted foot stays put
+          if (p.body === pinnedL || p.body === pinnedR || p.detached) continue; // a planted foot stays put
           const m = p.body.mass;
           p.body.force.x += m * ax * hb;
           p.body.force.z += m * az * hb;
@@ -1162,6 +1216,8 @@ export class Ragdoll {
         f.cur.lerpVectors(f.from, f.to, s);
         const clear = 0.09 + Math.min(0.1, hSpeed * 0.015) + Math.max(0, f.to.y - f.from.y);
         f.cur.y += Math.sin(Math.PI * Math.min(1, k * 1.15)) * clear;
+        // a runner's heel kicks up behind before the knee drives through
+        if (run) f.cur.y += Math.sin(Math.PI * Math.min(1, k * 1.7)) * this.tune.runClear;
         gSum += f.gFrom + (f.gTo - f.gFrom) * s;
 
         // steer the real foot along the arc (velocity blend, still collides)
@@ -1200,8 +1256,8 @@ export class Ragdoll {
           if (this.plants[S]) this.unplant(S);
           const hx = P.x + lx * 0.095 * sx, hz = P.z + lz * 0.095 * sx;
           const behind = -((f.plant.x - hx) * fx + (f.plant.z - hz) * fz);
-          if (behind > 0.52) {
-            const ex = behind - 0.52;
+          if (behind > this.tune.toeOff) {
+            const ex = behind - this.tune.toeOff;
             f.cur.x += fx * ex; f.cur.z += fz * ex;
             f.cur.y += Math.min(0.25, ex * 0.6);
           }
@@ -1318,16 +1374,17 @@ export class Ragdoll {
       if (st === 'stand' && this.grounded) {
         this.legIK('L', this.feet.L.cur);
         this.legIK('R', this.feet.R.cur);
+
       } else {
         this.sym('hip', -0.12, 0, 0.03);
         this.sym('knee', 0.2);
         this.sym('ankle', -0.08);
       }
-      const armAmp = (0.3 + 0.7 * L) * walk;
+      const armAmp = (0.3 + 0.45 * L) * walk;
       const st2 = this.stumble;
       this.setJ('shoulderL', Math.cos(ph) * armAmp + 0.04, 0, 0.13 + st2 * 0.9);
       this.setJ('shoulderR', -Math.cos(ph) * armAmp + 0.04, 0, -0.13 - st2 * 0.9);
-      this.sym('elbow', -0.25 - 1.0 * L * walk);
+      this.sym('elbow', -0.25 - 1.3 * L * walk);
       this.sym('wrist', 0);
       this.waist(0.04 + 0.1 * L + breathe, Math.cos(ph) * 0.14 * walk, 0);
       this.setJ('neck', -0.05 - 0.12 * L, 0, 0);
@@ -1644,6 +1701,7 @@ export class Ragdoll {
 
   addVelocity(x, y, z, spin = 0) {
     for (const p of this.parts) {
+      if (p.detached) continue;
       p.body.velocity.x += x; p.body.velocity.y += y; p.body.velocity.z += z;
       if (spin) {
         p.body.angularVelocity.x += (Math.random() - 0.5) * spin;

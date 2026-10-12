@@ -57,7 +57,7 @@ const sunOffset = new THREE.Vector3(30, 50, 18);
 
 fx.initFx(scene, camera);
 lv.initLevel(scene);
-blood.initBlood(scene);
+blood.initBlood(scene, renderer);
 L.onExplode = (p, r) => weapons.blastMines(p, r);
 
 let player = new Ragdoll(scene, { isPlayer: true, team: 0, name: 'Tú' });
@@ -427,12 +427,13 @@ function updateGrab(dt) {
   let vx = ex * k, vy = ey * k, vz = ez * k;
   const sp = Math.hypot(vx, vy, vz), MAX = 42;
   if (sp > MAX) { vx *= MAX / sp; vy *= MAX / sp; vz *= MAX / sp; }
-  if (grab.rag) {
+  // a torn-off piece is pulled on its own, not with the body it came from
+  if (grab.rag && !(b.userData.part && b.userData.part.detached)) {
     const R = grab.rag;
     R.restT = 0;
     if (R.state !== 'limp' && R.state !== 'fall') R.goFall('grab');
     const com = R.comVelocity(new THREE.Vector3());
-    const M = R.totalMass;
+    const M = R.liveMass || R.totalMass;
     const gain = 9;
     let fx_ = (vx - com.x) * gain * M, fy = (vy - com.y) * gain * M + M * (moonGravity ? 3.2 : GRAVITY), fz = (vz - com.z) * gain * M;
     const fm = Math.hypot(fx_, fy, fz), FMAX = M * 160;
@@ -442,6 +443,7 @@ function updateGrab(dt) {
     _gf.set(fx_ * 0.35, fy * 0.35, fz * 0.35);
     b.applyForce(_gf, _gr);
     for (const p of R.parts) {
+      if (p.detached) continue;
       const s = 0.65 * p.body.mass / M;
       p.body.force.x += fx_ * s; p.body.force.y += fy * s; p.body.force.z += fz * s;
     }
@@ -601,7 +603,7 @@ function handleEvents(rag) {
         break;
       }
       case 'step': if (isP || Math.random() < 0.3) sfx.knock(e.v * 0.4, 0.35); break;
-      case 'footfall': if (isP) sfx.knock(2.2, 0.32); break;
+      case 'footfall': if (isP) sfx.knock(2.2, 0.32); blood.footstep(rag, e.side); break;
       case 'jump': if (isP) sfx.whoosh(); break;
       case 'grip': sfx.blip(250); break;
     }
