@@ -25,21 +25,21 @@ export const VEHICLE_TYPES = {
     engine: 1300, maxSpeed: 11, reverse: 3, brake: 3.5,
     seat: [0, 0.36, -0.1], grip: [0.0, 0.62, 0.36], gripSpread: 0.24,
     seatForce: 3200, handForce: 420, susp: 0.07, stiff: 320, damp: [7, 10], roll: 0.4, friction: 1.6, stabilise: 30,
-    extraShapes: [[[0.28, 0.23, 0.46], [0, 0.55, 0]]], ground: -0.105, legs: [-1.5, 2.2],
+    extraShapes: [[[0.28, 0.23, 0.46], [0, 0.55, 0]]], ground: -0.105, legs: [-1.5, 2.2], airControl: [1.4, 1.6],
   },
   coche: {
     name: 'DESCAPOTABLE', mass: 1100, he: [0.85, 0.3, 2.0], wheelR: 0.34, track: 0.76, base: 1.35, wheelY: -0.25,
     engine: 11000, maxSpeed: 34, reverse: 7, brake: 9,
     seat: [0.4, -0.08, -0.2], grip: null, seatForce: 6500, handForce: 600,
     susp: 0.32, stiff: 22, damp: [2.2, 3.4], roll: 0.22, friction: 2.4, downforce: 1.4,
-    extraShapes: [[[0.85, 0.06, 0.6], [0, 0.36, 1.4]]], ground: -0.79,
+    extraShapes: [[[0.85, 0.06, 0.6], [0, 0.36, 1.4]]], ground: -0.79, airControl: [1.0, 1.2],
   },
   cohete: {
     name: 'TRINEO COHETE', mass: 650, he: [0.62, 0.09, 1.45], wheelR: 0.2, track: 0.62, base: 1.05, wheelY: -0.05,
     engine: 0, thrust: 15000, maxSpeed: 42, reverse: 0, brake: 8,
     seat: [0, 0.2, -0.2], grip: null, seatForce: 4800, handForce: 520,
     susp: 0.16, stiff: 75, damp: [3.4, 5.2], roll: 0.05, friction: 2.6, downforce: 2.5, stabilise: 14, yawAssist: 1.0,
-    extraShapes: [], ground: -0.36, legs: [-1.5, 2.2],
+    extraShapes: [], ground: -0.36, legs: [-1.5, 2.2], airControl: [2.6, 3.0],
   },
 };
 export const VEHICLE_ORDER = ['carrito', 'coche', 'cohete'];
@@ -264,8 +264,25 @@ export class Vehicle {
       const df = def.downforce * speed * speed;
       ch.force.x -= up.x * df; ch.force.y -= up.y * df; ch.force.z -= up.z * df;
     }
+    // in the air (no wheel touching anything): GTA-style control.
+    // W/S pitch the nose down/up, A/D roll; the fins stop fighting you
+    const airborne = this.rv.wheelInfos.every((w) => !w.raycastResult.hasHit);
+    this.airT = airborne ? (this.airT || 0) + dt : 0;
+    if (driving && this.airT > 0.15 && def.airControl) {
+      const k = Math.min(1, dt * 5);
+      const right = ch.vectorToWorldFrame(_v.set(1, 0, 0), _v3);
+      const wa = ch.angularVelocity;
+      const pitchNow = wa.x * right.x + wa.y * right.y + wa.z * right.z;
+      const dp = ((input.throttle || 0) * def.airControl[0] - pitchNow) * k;
+      wa.x += right.x * dp; wa.y += right.y * dp; wa.z += right.z * dp;
+      const fwdA = ch.vectorToWorldFrame(_v.set(0, 0, 1), _v3);
+      const rollNow = wa.x * fwdA.x + wa.y * fwdA.y + wa.z * fwdA.z;
+      const dr = (-(input.steer || 0) * def.airControl[1] - rollNow) * k;
+      wa.x += fwdA.x * dr; wa.y += fwdA.y * dr; wa.z += fwdA.z * dr;
+    }
+
     // fins: resist rolling over and help the nose follow the steering
-    if (def.stabilise) {
+    if (def.stabilise && !(this.airT > 0.15 && def.airControl)) {
       const up = ch.vectorToWorldFrame(_v.set(0, 1, 0), _v3);
       const m = def.mass;
       const k = def.stabilise * m * Math.min(1, 0.3 + Math.abs(speed) / 15);

@@ -46,7 +46,7 @@ La física no simula 206 cuerpos rígidos; simula 16 segmentos y resuelve las fr
 | P-09 | Dojo | Combate cuerpo a cuerpo por oleadas, a lo Lugaru |
 | P-10 | Campo minado | 70 minas enterradas. Cronometrado |
 
-En Muro y Cruce eliges vehículo con `V` (carrito, descapotable, trineo cohete). `W` acelera, `S` frena y, ya parado, da marcha atrás, `A`/`D` giran y `Espacio` es el freno de mano. Los tres llevan suspensión de muelle y amortiguador: la carrocería se inclina en las curvas y cabecea al frenar. El trineo tiene aletas que lo mantienen derecho y le ayudan a girar. El muñeco va sujeto al asiento y sale despedido cuando el impacto supera lo que aguanta la sujeción.
+En Muro y Cruce eliges vehículo con `V` (carrito, descapotable, trineo cohete). `W` acelera, `S` frena y, ya parado, da marcha atrás, `A`/`D` giran y `Espacio` es el freno de mano. Los tres llevan suspensión de muelle y amortiguador: la carrocería se inclina en las curvas y cabecea al frenar. El trineo tiene aletas que lo mantienen derecho y le ayudan a girar. En el aire, `W`/`S` inclinan el morro y `A`/`D` lo hacen rodar (el trineo con más fuerza, como en GTA). El muñeco va sujeto al asiento y sale despedido cuando el impacto supera lo que aguanta la sujeción.
 
 ## Combate
 

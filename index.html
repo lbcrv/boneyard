@@ -9,7 +9,7 @@
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=Big+Shoulders+Stencil+Display:wght@800;900&family=Barlow+Condensed:wght@500;600;700;800&family=Barlow:wght@400;500&family=Share+Tech+Mono&family=Courier+Prime:wght@400;700&family=Anton&family=Space+Mono:wght@400;700&display=swap" rel="stylesheet" />
   <link rel="preload" as="image" href="assets/keyart.jpg" />
-  <link rel="stylesheet" href="style.css?v=267c2999" />
+  <link rel="stylesheet" href="style.css?v=75b7d4de" />
   <script type="importmap">
   {
     "imports": {
@@ -17,7 +17,7 @@
       "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.160.0/examples/jsm/",
       "cannon-es": "https://cdn.jsdelivr.net/npm/cannon-es@0.20.0/dist/cannon-es.js",
       "./src/audio.js": "./src/audio.js?v=fbfd80e5",
-      "./src/blood.js": "./src/blood.js?v=81dc561d",
+      "./src/blood.js": "./src/blood.js?v=9cc68222",
       "./src/bloodfluid.js": "./src/bloodfluid.js?v=39848010",
       "./src/carmodels.js": "./src/carmodels.js?v=44eae565",
       "./src/combat.js": "./src/combat.js?v=3e162252",
@@ -25,7 +25,7 @@
       "./src/hud.js": "./src/hud.js?v=4a137fef",
       "./src/icons.js": "./src/icons.js?v=127fb4a2",
       "./src/level.js": "./src/level.js?v=53623989",
-      "./src/main.js": "./src/main.js?v=2a6788ce",
+      "./src/main.js": "./src/main.js?v=612a5d0c",
       "./src/maps.js": "./src/maps.js?v=d3dfc7bb",
       "./src/modes.js": "./src/modes.js?v=249a11cc",
       "./src/moves.js": "./src/moves.js?v=ef952761",
@@ -33,7 +33,7 @@
       "./src/ragdoll.js": "./src/ragdoll.js?v=64653306",
       "./src/skeleton.js": "./src/skeleton.js?v=513eb09b",
       "./src/textures.js": "./src/textures.js?v=f75d7914",
-      "./src/vehicles.js": "./src/vehicles.js?v=4ec481b1",
+      "./src/vehicles.js": "./src/vehicles.js?v=4da90cc2",
       "./src/weapons.js": "./src/weapons.js?v=62d64a90",
       "./src/wheel.js": "./src/wheel.js?v=c66a0edf"
     }
@@ -94,32 +94,11 @@
     <div id="equipped" aria-live="polite"><span class="eq-ico"></span><span class="eq-txt"><span class="eq-grp"></span><span class="eq-name"></span></span><span class="eq-hint"><span class="k">Tab</span> cambiar</span></div>
 
     <section id="help" class="protocol">
-      <div class="help-head"><span class="k">H</span> PROTOCOLO</div>
-      <dl class="keys">
-        <dt>WASD</dt><dd>mover</dd>
-        <dt>Shift</dt><dd>correr</dd>
-        <dt>Espacio</dt><dd>saltar</dd>
-        <dt>F</dt><dd>puñetazo</dd>
-        <dt>V</dt><dd>patada</dd>
-        <dt>C</dt><dd>agacharse / guardia</dd>
-        <dt>C + V</dt><dd>barrida</dd>
-        <dt>Q</dt><dd>placaje</dd>
-        <dt>E</dt><dd>agarrar</dd>
-        <dt>Z</dt><dd>bailar</dd>
-        <dt>X</dt><dd>inerte</dd>
-        <dt>R</dt><dd>reiniciar todo</dd>
-        <dt>Tab</dt><dd>rueda de herramientas</dd>
-        <dt>1–0</dt><dd>herramienta</dd>
-        <dt>Clic</dt><dd>usar</dd>
-        <dt>Clic der.</dt><dd>cámara</dd>
-        <dt>Rueda</dt><dd>zoom</dd>
-        <dt>T</dt><dd>cámara lenta</dd>
-        <dt>P</dt><dd>cámara libre</dd>
-        <dt>G</dt><dd>gravedad</dd>
-        <dt>B</dt><dd>sangre</dd>
-        <dt>Esc</dt><dd>expedientes</dd>
-      </dl>
-      <div class="help-foot">Contraataque: F o V justo cuando el rival empieza su golpe. Sin poder levantarte, WASD te arrastra.</div>
+      <button class="help-head" id="help-toggle" type="button"><kbd>H</kbd><span>Controles</span><span class="help-tog"></span></button>
+      <div class="help-body">
+        <div class="hgroup"><h3>Moverse</h3><div class="hk"><span class="hk-keys"><kbd>W</kbd><kbd>A</kbd><kbd>S</kbd><kbd>D</kbd></span><span class="hk-do">caminar</span></div><div class="hk"><span class="hk-keys"><kbd class="wide">Shift</kbd></span><span class="hk-do">correr</span></div><div class="hk"><span class="hk-keys"><kbd class="wide">Espacio</kbd></span><span class="hk-do">saltar</span></div><div class="hk"><span class="hk-keys"><kbd>C</kbd></span><span class="hk-do">agacharse</span></div><div class="hk"><span class="hk-keys"><kbd>X</kbd></span><span class="hk-do">quedarse inerte</span></div></div><div class="hgroup"><h3>Pelear</h3><div class="hk"><span class="hk-keys"><kbd>F</kbd></span><span class="hk-do">puñetazo · combo</span></div><div class="hk"><span class="hk-keys"><kbd>V</kbd></span><span class="hk-do">patada</span></div><div class="hk"><span class="hk-keys"><kbd>C</kbd><i>+</i><kbd>V</kbd></span><span class="hk-do">barrida</span></div><div class="hk"><span class="hk-keys"><kbd>C</kbd></span><span class="hk-do">guardia (rival cerca)</span></div><div class="hk"><span class="hk-keys"><kbd>Q</kbd></span><span class="hk-do">placaje</span></div><div class="hk"><span class="hk-keys"><kbd>E</kbd></span><span class="hk-do">agarrarse</span></div><div class="hk"><span class="hk-keys"><kbd>Z</kbd></span><span class="hk-do">bailar</span></div></div><div class="hgroup"><h3>Herramientas</h3><div class="hk"><span class="hk-keys"><kbd class="wide">Tab</kbd></span><span class="hk-do">rueda (mantén)</span></div><div class="hk"><span class="hk-keys"><svg class="mouse" viewBox="0 0 18 26" aria-hidden="true"><rect x="3" y="0" width="12" height="24" rx="6" class="m-body"/><path d="M3 9 V6 a6 6 0 0 1 6-6 V9 Z" class="m-lit"/><path d="M3 9 H15 M9 0 V9" class="m-line"/><rect x="7.6" y="2.2" width="2.8" height="4.6" rx="1.4" class="m-wheel"/></svg></span><span class="hk-do">usar</span></div><div class="hk"><span class="hk-keys"><kbd>1</kbd><i>–</i><kbd>0</kbd></span><span class="hk-do">elegir directo</span></div></div><div class="hgroup"><h3>Cámara</h3><div class="hk"><span class="hk-keys"><svg class="mouse" viewBox="0 0 18 26" aria-hidden="true"><rect x="3" y="0" width="12" height="24" rx="6" class="m-body"/><path d="M9 0 a6 6 0 0 1 6 6 V9 H9 Z" class="m-lit"/><path d="M3 9 H15 M9 0 V9" class="m-line"/><rect x="7.6" y="2.2" width="2.8" height="4.6" rx="1.4" class="m-wheel"/></svg></span><span class="hk-do">girar</span></div><div class="hk"><span class="hk-keys"><svg class="mouse" viewBox="0 0 18 26" aria-hidden="true"><rect x="3" y="0" width="12" height="24" rx="6" class="m-body"/><path d="M3 9 H15 M9 0 V9" class="m-line"/><rect x="7.6" y="2.2" width="2.8" height="4.6" rx="1.4" class="m-wheel lit"/></svg></span><span class="hk-do">acercar · alejar</span></div><div class="hk"><span class="hk-keys"><kbd>P</kbd></span><span class="hk-do">cámara libre</span></div><div class="hk"><span class="hk-keys"><kbd>T</kbd></span><span class="hk-do">cámara lenta</span></div></div><div class="hgroup"><h3>Partida</h3><div class="hk"><span class="hk-keys"><kbd>R</kbd></span><span class="hk-do">reiniciar todo</span></div><div class="hk"><span class="hk-keys"><kbd>G</kbd></span><span class="hk-do">gravedad lunar</span></div><div class="hk"><span class="hk-keys"><kbd>B</kbd></span><span class="hk-do">sangre sí / no</span></div><div class="hk"><span class="hk-keys"><kbd class="wide">Esc</kbd></span><span class="hk-do">menú</span></div></div>
+        <p class="help-foot"><b>Contraataque:</b> pulsa F o V justo cuando el rival empieza su golpe. <b>En el suelo y sin poder levantarte,</b> WASD te arrastra. <b>En un vehículo:</b> W acelera, S frena, Espacio freno de mano; en el aire, W/S y A/D lo giran.</p>
+      </div>
     </section>
 
     <div id="wheel" aria-hidden="true"></div>
@@ -178,6 +157,6 @@
 
   <div id="loading"><span>INGRESANDO PACIENTE</span><i></i></div>
 
-  <script type="module" src="src/main.js?v=2a6788ce"></script>
+  <script type="module" src="src/main.js?v=612a5d0c"></script>
 </body>
 </html>

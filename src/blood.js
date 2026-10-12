@@ -325,6 +325,19 @@ export function spray(point, dir, amount = 8, speed = 3, spread = 0.9) {
   }
 }
 
+/** One drop of an arterial stream: small, tightly aimed, inheriting no spread. */
+function stream(point, dir, speed) {
+  const d = dropItems[dropCursor];
+  dropCursor = (dropCursor + 1) % MAX_DROPS;
+  d.alive = true;
+  d.pos.copy(point);
+  d.vel.set(dir.x + (Math.random() - 0.5) * 0.08, dir.y + (Math.random() - 0.5) * 0.08, dir.z + (Math.random() - 0.5) * 0.08)
+    .normalize().multiplyScalar(speed * (0.92 + Math.random() * 0.16));
+  d.size = 0.005 + Math.random() * 0.004;
+  d.life = 2.5;
+  bloodColor(d.color);
+}
+
 export function splat(point, normal, size, kind = null, body = null, vel = null) {
   if (!enabled) return;
   if (fluid.accepts(body, normal)) { fluid.deposit(point, 0.8 + size * 12, vel, normal); return; }
@@ -436,14 +449,17 @@ export function update(dt, ragdolls = []) {
       d.alive = false;
       const sp = ray.hitPointWorld, nn = ray.hitNormalWorld;
       const fast = d.vel.length() > 3;
-      if (fluid.accepts(ray.body, nn)) fluid.deposit(_p.set(sp.x, sp.y, sp.z), 0.12 + d.size * 14, d.vel, nn);
+      if (fluid.accepts(ray.body, nn)) fluid.deposit(_p.set(sp.x, sp.y, sp.z), 0.04 + d.size * 18, d.vel, nn);
       else if (Math.random() < 0.4) splat(new THREE.Vector3(sp.x, sp.y, sp.z), new THREE.Vector3(nn.x, nn.y, nn.z), fast ? 0.07 + d.size * 8 : 0.03 + d.size * 4, fast ? null : 'drops', ray.body, d.vel);
       continue;
     }
-    _n.copy(d.vel).normalize();
+    const sp = d.vel.length();
+    _n.copy(d.vel).multiplyScalar(1 / (sp || 1));
     _q.setFromUnitVectors(UP, _n);
-    _s.set(d.size, d.size * (1 + Math.min(2.5, d.vel.length() * 0.25)), d.size);
-    _m.compose(d.pos, _q, _s);
+    // length = the distance it covers in ~1/30 s (what the eye smears it into)
+    const len = Math.max(d.size * 1.4, Math.min(0.22, sp / 30));
+    _s.set(d.size * 0.8, len, d.size * 0.8);
+    _m.compose(_t1.copy(d.pos).addScaledVector(_n, -len * 0.5), _q, _s);
     drops.setMatrixAt(n, _m);
     drops.setColorAt(n, d.color);
     n++;
@@ -494,11 +510,11 @@ export function update(dt, ragdolls = []) {
         if (phase < 0.22) {
           st.jetT -= dt;
           if (st.jetT <= 0) {
-            st.jetT = 0.018;
+            st.jetT = 0.008;
             _wn.set(st.normal.x, st.normal.y, st.normal.z);
             b.vectorToWorldFrame(_wn, _wn);
             const pulse = Math.sin((phase / 0.22) * Math.PI);
-            spray(_p.set(_wp.x, _wp.y, _wp.z), _n.set(_wn.x, _wn.y, _wn.z), 1, (1.6 + 3.2 * pulse) * (0.4 + 0.6 * strength), 0.25);
+            stream(_p.set(_wp.x, _wp.y, _wp.z), _n.set(_wn.x, _wn.y, _wn.z), (1.4 + 2.8 * pulse) * (0.4 + 0.6 * strength));
           }
         }
       } else {
@@ -564,6 +580,7 @@ export function update(dt, ragdolls = []) {
         }
         const sp = Math.hypot(b.velocity.x, b.velocity.z);
         if (!part.bloodWet || part.bloodWet < 0.05 || sp < 0.35) continue;
+        if (!bleeding && !stainAt(part, hp)) continue; // only the bloody side leaves a trail
         const len = Math.max(part.bbr * 0.5, sp * 0.06);
         fluid.stamp(_p.set(hp.x - b.velocity.x * 0.05, hp.y, hp.z - b.velocity.z * 0.05), hn, b.velocity, len, part.bbr * 0.55, 0.16 * part.bloodWet);
         if (!bleeding) part.bloodWet *= 1 - Math.min(0.5, sp * 0.06);
@@ -595,9 +612,11 @@ function prints() {
       const wet = part.bloodWet || 0;
       const otherPart = other.userData && other.userData.part;
       if (otherPart) {
-        // limb against limb (his own or someone else's): the blood rubs off
+        // limb against limb (his own or someone else's): the blood rubs off,
+        // but only where the bloody patch itself is what touches
         if (wet < 0.08 || !otherPart.stains) continue;
         _cp.set(mine.position.x + r.x, mine.position.y + r.y, mine.position.z + r.z);
+        if (!stainAt(part, _cp)) continue;
         wound(otherPart, _cp, 0.01, 'minor');
         otherPart.bloodWet = Math.max(otherPart.bloodWet || 0, wet * 0.4);
         part.printAt = now;
@@ -625,8 +644,10 @@ function prints() {
           continue;
         }
         if (wet < 0.08) continue;
+        // a print only comes from the stained patch, not from anywhere on the part
+        if (!stainAt(part, _p.set(mine.position.x + r.x, mine.position.y + r.y, mine.position.z + r.z))) continue;
         _cd.set(0, -1, 0).applyQuaternion(_q.set(mine.quaternion.x, mine.quaternion.y, mine.quaternion.z, mine.quaternion.w));
-        if (hand) fluid.stamp(_cp, _cn, _cd, 0.1, 0.055, 0.3 * wet, HAND);
+        if (hand) fluid.stamp(_cp, _cn, _cd, 0.1, 0.055, 0.2 * wet, HAND);
         else fluid.stamp(_cp, _cn, mine.velocity.lengthSquared() > 0.25 ? mine.velocity : _cd, part.bbr * 0.7, part.bbr * 0.5, 0.22 * wet);
       } else {
         if (wet < 0.08) continue;
@@ -636,6 +657,20 @@ function prints() {
       part.bloodWet = wet * 0.55;
     }
   }
+}
+
+/** Is this point on the part inside one of its blood stains? */
+const _sw = new CANNON.Vec3();
+function stainAt(part, point) {
+  if (!part.stains || !part.stains.length) return false;
+  const b = part.body;
+  for (const st of part.stains) {
+    _sw.set(st.local.x, st.local.y, st.local.z);
+    b.pointToWorldFrame(_sw, _sw);
+    const d = Math.hypot(_sw.x - point.x, _sw.y - point.y, _sw.z - point.z);
+    if (d < st.cur + 0.03) return true;
+  }
+  return false;
 }
 
 // a hand print: palm, four fingers and a thumb (f along the hand toward the fingertips, s across)

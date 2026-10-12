@@ -112,6 +112,12 @@ const TOOL_GROUPS = {
 };
 const EMOTES = [['disco', 'BAILE DISCO'], ['robot', 'ROBOT'], ['pollo', 'BAILE DEL POLLO'], ['saludo', 'SALUDO']];
 
+function toggleHelp() {
+  const collapsed = document.getElementById('help').classList.toggle('collapsed');
+  store('helpCollapsed', collapsed ? 1 : 0);
+}
+document.getElementById('help-toggle').addEventListener('click', (e) => { e.stopPropagation(); toggleHelp(); });
+
 function store(key, val) { try { localStorage.setItem('boneyard.' + key, String(val)); } catch { /* ignore */ } }
 function load(key) { try { return Number(localStorage.getItem('boneyard.' + key)) || 0; } catch { return 0; } }
 
@@ -256,11 +262,7 @@ window.addEventListener('keydown', (e) => {
       for (const b of world.bodies) b.wakeUp();
       sfx.blip(moonGravity ? 330 : 660);
       break;
-    case 'KeyH': {
-      const collapsed = document.getElementById('help').classList.toggle('collapsed');
-      store('helpCollapsed', collapsed ? 1 : 0);
-      break;
-    }
+    case 'KeyH': toggleHelp(); break;
     default: {
       const m = /^Digit(\d)$/.exec(e.code);
       if (m) selectTool(m[1] === '0' ? 9 : Number(m[1]) - 1);
