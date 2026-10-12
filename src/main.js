@@ -13,6 +13,7 @@ import * as weapons from './weapons.js';
 import { AIController } from './combat.js';
 import { createMode } from './modes.js';
 import { ICONS } from './icons.js';
+import { initVitals, updateVitals } from './hud.js';
 
 // ------------------------------------------------------------------ renderer / scene
 const app = document.getElementById('app');
@@ -707,11 +708,21 @@ function updateXray() {
   }
 }
 
+let lastHudT = 0;
 function updateHUD() {
   elScore.textContent = score.toLocaleString('es');
   elBest.textContent = best.toLocaleString('es');
   const k = mode ? mode.kind : 'sandbox';
-  elScoreLabel.textContent = k === 'dojo' || k === 'sumo' ? 'DAÑO CAUSADO' : 'DOLOR';
+  elScoreLabel.textContent = k === 'dojo' || k === 'sumo' ? 'FACTURA · DAÑOS A TERCEROS' : 'FACTURA · URGENCIAS';
+  // the bedside monitor follows the dummy
+  const hdt = Math.min(0.1, Math.max(0, realTime - lastHudT));
+  lastHudT = realTime;
+  const pv = player.pelvis.velocity;
+  const st = player.state;
+  const stress = Math.min(1, player.stumble * 0.7 + Math.hypot(pv.x, pv.z) / 9 + (st === 'fall' ? 0.45 : 0) + (player.act ? 0.25 : 0) + (100 - Math.max(0, player.hp)) / 250);
+  const out = !player.dead && (player.koT > 0 || player.hp <= 0);
+  const alarmed = player.dead || out || (player.bloodLeft ?? 1) < 0.55;
+  updateVitals(hdt, { alive: !player.dead, out, stress, blood: Math.max(0, player.bloodLeft ?? 1), consc: player.dead ? 0 : Math.min(100, player.hp), sound: alarmed && !paused }, realTime);
   const mult = 1 + Math.min(20, combo) * 0.1;
   const comboLive = realTime - lastHitTime < 1.3 && combo > 0;
   elCombo.classList.toggle('hidden', !comboLive);
@@ -1012,7 +1023,7 @@ function tick(dt, render = true) {
   const W = Math.max(1, window.innerWidth), H = Math.max(1, window.innerHeight);
   const menuVisible = !menu.classList.contains('hidden');
   document.body.classList.toggle('menu-open', menuVisible);
-  if (menuVisible && W > 760) camera.setViewOffset(W, H, -Math.min(540, W) / 2, 0, W, H);
+  if (menuVisible && W > 760) camera.setViewOffset(W, H, -Math.min(640, W) / 2, 0, W, H);
   else if (camera.view && camera.view.enabled) camera.clearViewOffset();
 
   syncAll();
@@ -1035,6 +1046,7 @@ if (qualityMode === 2) applyQuality(true);
 document.getElementById('help').classList.toggle('collapsed', load('helpCollapsed') === 1);
 loadMap(MAPS[0]);
 document.getElementById('loading').classList.add('hidden');
+initVitals();
 frame();
 
 // debug handle for testing from the console

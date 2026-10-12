@@ -484,7 +484,7 @@ export class Ragdoll {
       : Math.pow(Math.max(0, v - 2.5), 1.25) * 1.3 * part.def.mult * (h.dmgMul || 1) * taken * region;
     this.hp -= dmg;
     // only a blow to the head (or a beating in a fight) knocks him out
-    if (this.hp <= 0 && !isHeadHit && !strike && h.kind !== 'bullet') this.hp = Math.max(this.hp, 4);
+    if (this.hp <= 0 && !this.dead && !isHeadHit && !strike && h.kind !== 'bullet') this.hp = Math.max(this.hp, 4);
 
     // fractures
     let broken = [];

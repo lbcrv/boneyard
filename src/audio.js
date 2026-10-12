@@ -188,6 +188,23 @@ export function blip(freq = 660) {
   o.start(t); o.stop(t + 0.2);
 }
 
+/** Heart monitor: a short beep per beat, or the long flat tone of an arrest. */
+export function monitorBeep(flat = false) {
+  if (!ctx) return;
+  const t = ctx.currentTime;
+  const o = ctx.createOscillator();
+  o.type = 'sine';
+  o.frequency.setValueAtTime(flat ? 980 : 1040, t);
+  const g = ctx.createGain();
+  const len = flat ? 2.6 : 0.07;
+  g.gain.setValueAtTime(0, t);
+  g.gain.linearRampToValueAtTime(flat ? 0.05 : 0.035, t + 0.006);
+  g.gain.setValueAtTime(flat ? 0.05 : 0.035, t + len - 0.03);
+  g.gain.linearRampToValueAtTime(0, t + len);
+  o.connect(g).connect(master);
+  o.start(t); o.stop(t + len + 0.02);
+}
+
 export function fanfare() {
   if (!ctx) return;
   const notes = [523, 659, 784, 1046];
