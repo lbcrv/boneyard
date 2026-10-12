@@ -856,6 +856,7 @@ function buildMenu() {
     b.setAttribute('role', 'option');
     b.innerHTML = '<img alt="" /><span class="c-code"></span><span class="c-name"></span>';
     b.querySelector('img').src = 'assets/maps/' + m.id + '.jpg';
+    b.querySelector('img').draggable = false;
     b.querySelector('.c-code').textContent = m.code;
     b.querySelector('.c-name').textContent = m.name;
     b.addEventListener('mouseenter', () => pickMap(i));
@@ -893,6 +894,38 @@ function startMap(i) {
   paused = false;
 }
 document.getElementById('md-go').addEventListener('click', () => startMap(menuSel));
+
+// the card row scrolls by dragging it with the mouse (or a finger) and with the wheel
+{
+  const row = document.getElementById('map-list');
+  let drag = null;
+  row.addEventListener('pointerdown', (e) => {
+    if (e.button !== 0) return;
+    drag = { x: e.clientX, left: row.scrollLeft, moved: false, id: e.pointerId };
+  });
+  row.addEventListener('pointermove', (e) => {
+    if (!drag) return;
+    const dx = e.clientX - drag.x;
+    if (!drag.moved && Math.abs(dx) > 6) { drag.moved = true; row.setPointerCapture(drag.id); row.classList.add('dragging'); }
+    if (drag.moved) row.scrollLeft = drag.left - dx;
+  });
+  const end = () => {
+    if (!drag) return;
+    // a drag is not a click: swallow the click that follows it
+    if (drag.moved) {
+      const eat = (ev) => { ev.stopPropagation(); ev.preventDefault(); };
+      row.addEventListener('click', eat, { capture: true, once: true });
+      setTimeout(() => row.removeEventListener('click', eat, { capture: true }), 0);
+    }
+    drag = null;
+    row.classList.remove('dragging');
+  };
+  row.addEventListener('pointerup', end);
+  row.addEventListener('pointercancel', end);
+  row.addEventListener('wheel', (e) => {
+    if (Math.abs(e.deltaY) > Math.abs(e.deltaX)) { row.scrollLeft += e.deltaY; e.preventDefault(); }
+  }, { passive: false });
+}
 
 const optBlood = document.getElementById('opt-blood');
 const optQuality = document.getElementById('opt-quality');

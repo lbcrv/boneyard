@@ -62,7 +62,7 @@ export function updateVitals(dt, s, now) {
   const steps = Math.max(1, Math.round(SPEED * dt));
   g.lineWidth = 1.6;
   g.lineJoin = 'round';
-  const col = !s.alive ? '#ff4b3e' : s.blood < 0.55 || hr > 150 ? '#ffb547' : '#7dffa8';
+  const col = !s.alive ? '#ff3b2e' : s.blood < 0.55 || hr > 150 ? '#ff8a1f' : '#ffd21f';
   g.strokeStyle = col;
   g.shadowColor = col;
   g.shadowBlur = 6;
