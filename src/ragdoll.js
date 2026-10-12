@@ -451,7 +451,8 @@ export class Ragdoll {
     const standing = this.state === 'stand' || this.state === 'getup';
     const isLeg = isFoot || part.name.startsWith('shin') || part.name.startsWith('thigh');
     const staticHit = h.other && h.other.type !== CANNON.Body.DYNAMIC;
-    if (standing && isLeg && !h.kind && staticHit && v < 9.5) {
+    // a foot landing on something walkable (running onto a ramp hits it hard) is a step, not a blow
+    if (standing && isLeg && !h.kind && staticHit && (v < 9.5 || (h.ny > 0.7 && v < 16))) {
       if (isFoot && v > 1.2) this.events.push({ type: 'step', v, point, rag: this });
       // legs clipping a step edge: a walk shrugs it off, a sprint trips over it
       if (h.ny > 0.8) return; // landing on top of something, not clipping its edge

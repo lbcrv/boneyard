@@ -46,6 +46,7 @@ export const MAPS = [
 
       // ramp up to a platform
       lv.staticBox([4, 0.4, 10], [-9, 1.35, 9.8], { rot: [-0.3, 0, 0], color: 0xe0b13a });
+      toeWedge(-9, 4, 5.02, 0.065, 1, 0xe0b13a);
       lv.staticBox([6, 3, 6], [-9, 1.5, 17.6], { color: 0x6f6c66 });
       for (let i = 0; i < 3; i++) lv.barrel([-10.8 + i * 1.8, 3.6, 19.5]);
       lv.launchPad([-7, 3, 15.5], [0, 12, -9]);
@@ -98,6 +99,7 @@ export const MAPS = [
 
       // big ramp to fly off
       lv.staticBox([5, 0.4, 14], [-26, 2.0, 2], { rot: [0.3, 0, 0], color: 0xd9682b });
+      toeWedge(-26, 5, 8.69, 0.125, -1, 0xd9682b);
       lv.staticBox([5, 6, 4], [-26, 3, -6.5], { color: 0x6f6c66 });
       for (let i = 0; i < 6; i++) lv.staticBox([5, 0.6 * (i + 1), 0.7], [-26, 0.3 * (i + 1), -9.0 - i * 0.7 + 0.0 * i], { color: 0x99958c });
     },
@@ -566,6 +568,18 @@ function curvedRamp(x, width, zTop, yTop, zEnd) {
   m.position.x = x;
   m.castShadow = true; m.receiveShadow = true;
   lv.decoMesh(m);
+}
+
+/**
+ * The low end of a tilted slab stands a few cm proud of the floor: a lip that
+ * catches running feet. A thin wedge from the floor up to that edge smooths it.
+ * dir: +1 if the ramp climbs toward +z, -1 toward -z.
+ */
+function toeWedge(x, width, zLip, yLip, dir, color) {
+  const L = 1.1;
+  const ang = Math.atan2(yLip, L) * dir;
+  const t = 0.08;
+  lv.staticBox([width, t, L + 0.1], [x, yLip / 2 - t / 2, zLip - dir * L / 2], { rot: [-ang, 0, 0], color });
 }
 
 /** A launch kicker with a curved face: zero height at its toe, steepest at the lip. */
