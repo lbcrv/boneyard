@@ -211,6 +211,12 @@ let lastMouse = { x: 0, y: 0 };
 
 window.addEventListener('keydown', (e) => {
   if (e.code === 'Escape') { toggleMenu(); return; }
+  if (!menu.classList.contains('hidden')) {
+    if (e.code === 'ArrowRight' || e.code === 'ArrowDown') { e.preventDefault(); pickMap(menuSel + 1, true); }
+    else if (e.code === 'ArrowLeft' || e.code === 'ArrowUp') { e.preventDefault(); pickMap(menuSel - 1, true); }
+    else if (e.code === 'Enter') { e.preventDefault(); startMap(menuSel); }
+    return;
+  }
   if (paused) return;
   if (['Space', 'Backspace', 'Tab'].includes(e.code)) e.preventDefault();
   if (e.repeat && !['KeyW', 'KeyA', 'KeyS', 'KeyD', 'KeyC', 'KeyE'].includes(e.code)) return;
@@ -839,35 +845,54 @@ L.onFinish = () => {
 
 // ------------------------------------------------------------------ menu, settings & toolbar
 const menu = document.getElementById('menu');
+let menuSel = 0;
 function buildMenu() {
   const list = document.getElementById('map-list');
   list.innerHTML = '';
-  for (const m of MAPS) {
+  MAPS.forEach((m, i) => {
     const b = document.createElement('button');
-    b.className = 'map-row';
-    const bestScore = load('best.' + m.id);
-    const bestTime = load('time.' + m.id);
-    b.innerHTML = '<span class="code"></span><span class="what"><span class="nm"></span><span class="spec"></span></span><span class="rec"></span>';
-    b.querySelector('.code').textContent = m.code;
-    b.querySelector('.nm').textContent = m.name;
-    b.querySelector('.spec').textContent = m.desc;
-    const rec = b.querySelector('.rec');
-    rec.textContent = bestScore ? bestScore.toLocaleString('es') : '—';
-    if (bestTime) {
-      const t = document.createElement('small');
-      t.textContent = bestTime.toFixed(2) + ' s';
-      rec.appendChild(t);
-    }
-    b.addEventListener('click', () => {
-      sfx.initAudio();
-      sfx.blip(660);
-      loadMap(m);
-      menu.classList.add('hidden');
-      paused = false;
-    });
+    b.className = 'card';
+    b.type = 'button';
+    b.setAttribute('role', 'option');
+    b.innerHTML = '<img alt="" /><span class="c-code"></span><span class="c-name"></span>';
+    b.querySelector('img').src = 'assets/maps/' + m.id + '.jpg';
+    b.querySelector('.c-code').textContent = m.code;
+    b.querySelector('.c-name').textContent = m.name;
+    b.addEventListener('mouseenter', () => pickMap(i));
+    b.addEventListener('focus', () => pickMap(i));
+    b.addEventListener('click', () => startMap(i));
     list.appendChild(b);
-  }
+  });
+  const cur = currentMap ? MAPS.indexOf(currentMap) : 0;
+  pickMap(cur < 0 ? 0 : cur, true);
 }
+
+function pickMap(i, scroll = false) {
+  menuSel = (i + MAPS.length) % MAPS.length;
+  const m = MAPS[menuSel];
+  document.querySelectorAll('#map-list .card').forEach((el, j) => {
+    el.classList.toggle('sel', j === menuSel);
+    el.setAttribute('aria-selected', String(j === menuSel));
+    if (j === menuSel && scroll) el.scrollIntoView({ block: 'nearest', inline: 'center', behavior: 'smooth' });
+  });
+  document.getElementById('md-code').textContent = m.code;
+  document.getElementById('md-name').textContent = m.name;
+  document.getElementById('md-desc').textContent = m.desc;
+  const bestScore = load('best.' + m.id), bestTime = load('time.' + m.id);
+  document.getElementById('md-rec').textContent = bestScore ? 'L ' + bestScore.toLocaleString('es') : '—';
+  document.getElementById('md-time').textContent = bestTime ? 'MEJOR TIEMPO ' + bestTime.toFixed(2) + ' s' : '';
+  const detail = document.getElementById('map-detail');
+  detail.classList.remove('swap'); void detail.offsetWidth; detail.classList.add('swap');
+}
+
+function startMap(i) {
+  sfx.initAudio();
+  sfx.blip(660);
+  loadMap(MAPS[(i + MAPS.length) % MAPS.length]);
+  menu.classList.add('hidden');
+  paused = false;
+}
+document.getElementById('md-go').addEventListener('click', () => startMap(menuSel));
 
 const optBlood = document.getElementById('opt-blood');
 const optQuality = document.getElementById('opt-quality');
@@ -1020,11 +1045,9 @@ function tick(dt, render = true) {
     cam.yaw += dt * 0.08;
   }
 
-  const W = Math.max(1, window.innerWidth), H = Math.max(1, window.innerHeight);
   const menuVisible = !menu.classList.contains('hidden');
   document.body.classList.toggle('menu-open', menuVisible);
-  if (menuVisible && W > 760) camera.setViewOffset(W, H, -Math.min(640, W) / 2, 0, W, H);
-  else if (camera.view && camera.view.enabled) camera.clearViewOffset();
+  if (camera.view && camera.view.enabled) camera.clearViewOffset();
 
   syncAll();
   player.updateVisuals();
