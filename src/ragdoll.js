@@ -286,7 +286,7 @@ export class Ragdoll {
         });
       }
       world.addConstraint(c);
-      const j = { ...jd, P, C, constraint: c, target: new THREE.Quaternion(), prevTarget: new THREE.Quaternion(), broken: false, weak: 1, hipJoint: jd.name.startsWith('hip') };
+      const j = { ...jd, P, C, constraint: c, target: new THREE.Quaternion(), prevTarget: new THREE.Quaternion(), broken: false, weak: 1, hipJoint: jd.name.startsWith('hip'), legJoint: /^(hip|knee|ankle)/.test(jd.name) };
       this.joints.push(j);
       this.jointMap[jd.name] = j;
       C.joint = j;
@@ -1089,7 +1089,9 @@ export class Ragdoll {
 
     // ---- muscles
     const snap = this.act && this.state === 'stand' ? 1.6 : 1;
-    for (const j of this.joints) if (!j.C.detached) this.servo(j, dt, muscle * j.weak * snap);
+    // seated legs hold a fixed pose against the car's bumps: much stiffer
+    const seatLegs = this.state === 'seated' ? 3 : 1;
+    for (const j of this.joints) if (!j.C.detached) this.servo(j, dt, muscle * j.weak * snap * (j.legJoint ? seatLegs : 1));
     for (const j of this.joints) if (j.type === 'hinge' && !j.C.detached) this.hingeLimit(j, dt);
 
     // ---- balance cheats
@@ -1144,6 +1146,13 @@ export class Ragdoll {
         this.pelvis.force.x += this.totalMass * ax * 0.5 * b;
         this.pelvis.force.z += this.totalMass * az * 0.5 * b;
       }
+    }
+
+    // seated, the legs rest on the seat cushion and the floor of the car (or
+    // the rim of a trolley): without that support the muscles alone let them
+    // sag down through the road
+    if (this.state === 'seated') {
+      for (const p of this.parts) if (!p.detached && /^(thigh|shin|foot)/.test(p.name)) p.body.force.y += p.body.mass * G_EST;
     }
 
     // heavier fall: a little extra pull once he's out of control

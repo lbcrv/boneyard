@@ -25,7 +25,7 @@ export const VEHICLE_TYPES = {
     engine: 1300, maxSpeed: 11, reverse: 3, brake: 3.5,
     seat: [0, 0.36, -0.1], grip: [0.0, 0.62, 0.36], gripSpread: 0.24,
     seatForce: 3200, handForce: 420, susp: 0.07, stiff: 320, damp: [7, 10], roll: 0.4, friction: 1.6, stabilise: 30,
-    extraShapes: [[[0.28, 0.23, 0.46], [0, 0.55, 0]]], ground: -0.105, legs: [-1.45, 0.25],
+    extraShapes: [[[0.28, 0.23, 0.46], [0, 0.55, 0]]], ground: -0.105, legs: [-1.5, 2.2],
   },
   coche: {
     name: 'DESCAPOTABLE', mass: 1100, he: [0.85, 0.3, 2.0], wheelR: 0.34, track: 0.76, base: 1.35, wheelY: -0.25,
@@ -39,7 +39,7 @@ export const VEHICLE_TYPES = {
     engine: 0, thrust: 15000, maxSpeed: 42, reverse: 0, brake: 8,
     seat: [0, 0.2, -0.2], grip: null, seatForce: 4800, handForce: 520,
     susp: 0.16, stiff: 75, damp: [3.4, 5.2], roll: 0.05, friction: 2.6, downforce: 2.5, stabilise: 14, yawAssist: 1.0,
-    extraShapes: [], ground: -0.36,
+    extraShapes: [], ground: -0.36, legs: [-1.5, 2.2],
   },
 };
 export const VEHICLE_ORDER = ['carrito', 'coche', 'cohete'];
@@ -175,6 +175,11 @@ export class Vehicle {
     world.addConstraint(c);
     this.seatC = c;
     this.constraints.push(c);
+    // a second strap point at the front of the hips: one point alone let the
+    // pelvis roll back, and the legs hung down through the road
+    const c2 = new CANNON.PointToPointConstraint(pelvis, new CANNON.Vec3(0, -0.06, 0.14), ch, new CANNON.Vec3(def.seat[0], def.seat[1], def.seat[2] + 0.14), def.seatForce * 0.6);
+    world.addConstraint(c2);
+    this.constraints.push(c2);
     // hands on the wheel / bar / basket rim
     const grip = def.grip || [def.seat[0], def.seat[1] + 0.3, def.seat[2] + 0.5];
     const spread = def.gripSpread || 0.17;
@@ -269,6 +274,21 @@ export class Vehicle {
       ch.torque.x += -up.z * k - w.x * m * 0.8;
       ch.torque.z += up.x * k - w.z * m * 0.8;
       if (driving && def.yawAssist) ch.torque.y += (input.steer || 0) * m * def.yawAssist * Math.min(1, Math.abs(speed) / 6) * Math.sign(speed || 1) - w.y * m * 0.3;
+    }
+
+    // seated legs ride with the car (they rest on its floor and seat): through
+    // bumps and the bottom of the ramp they would otherwise lag and dip
+    if (this.rag && !this.ejected) {
+      const w = ch.angularVelocity;
+      for (const p of this.rag.parts) {
+        if (p.detached || !/^(thigh|shin|foot)/.test(p.name)) continue;
+        const b = p.body;
+        const rx = b.position.x - ch.position.x, ry = b.position.y - ch.position.y, rz = b.position.z - ch.position.z;
+        const px = v.x + w.y * rz - w.z * ry, py = v.y + w.z * rx - w.x * rz, pz = v.z + w.x * ry - w.y * rx;
+        b.velocity.x += (px - b.velocity.x) * 0.15;
+        b.velocity.y += (py - b.velocity.y) * 0.15;
+        b.velocity.z += (pz - b.velocity.z) * 0.15;
+      }
     }
 
     this.age = (this.age || 0) + dt;
