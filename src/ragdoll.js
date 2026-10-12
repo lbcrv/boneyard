@@ -314,7 +314,8 @@ export class Ragdoll {
       if (p.stains) { p.stains.length = 0; p.stainU.uBloodN.value = 0; p.bleedT = 0; }
       p.mat.color.copy(p.baseColor);
     }
-    for (const p of this.parts) p.detached = false;
+    for (const p of this.parts) { p.detached = false; p.bloodWet = 0; }
+    this.bloodFeet = null; // clean soles: no footprints from the last run
     this.liveMass = this.totalMass;
     for (const j of this.joints) {
       if (j.severed) { world.addConstraint(j.constraint); j.severed = false; }

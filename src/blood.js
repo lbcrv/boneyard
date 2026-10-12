@@ -245,6 +245,8 @@ export function makeStainable(material, part) {
 }
 
 function clearPart(part) {
+  part.bloodWet = 0; // no blood on the skin, nothing to print with
+  part.soakT = part.printAt = 0;
   if (!part.stains) return;
   part.stains.length = 0;
   part.stainU.uBloodN.value = 0;
